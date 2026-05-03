@@ -1,27 +1,83 @@
-import { FormEvent, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { FormEvent, useEffect, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { StubNavItem } from "@/components/StubNavItem";
+import { useSession } from "@/context/SessionContext";
+import { ApiError, apiPost, persistAuthTokensFromResponse } from "@/lib/api";
 
 const BRAND_PATTERN =
   "https://lh3.googleusercontent.com/aida-public/AB6AXuAeQWu8uDOUDIBHFNGG48Xom1xvOzeaOko60cXFxqIuh3JS2xFCfWvxOycITRH7rZNYZXQq__PiVZJzmC7x7LwQyGArEA_7lgNdjhuWlTCUnybY4OE1vONGiFUkIql0pZgPjlMUrgIer44X2gJXP2iVVxU-p9tiWWlehWiAiEqbIDEc2b_oL5UJDAlscBl4E1Qstm-IgydRdmZTSPQHTxUy6Nn4KII14nDqsVI5_PcybX2255Is17ZCOAokJneVoYHp8L3KD8k-zFE";
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { refresh, user, status } = useSession();
   const [tenantCode, setTenantCode] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [authError, setAuthError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  function handleSubmit(e: FormEvent) {
+  const fromPath =
+    (location.state as { from?: string } | null)?.from && typeof (location.state as { from?: string }).from === "string"
+      ? (location.state as { from: string }).from
+      : "/dashboard";
+
+  useEffect(() => {
+    if (status === "ready" && user) {
+      navigate(fromPath, { replace: true });
+    }
+  }, [user, status, fromPath, navigate]);
+
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     const trimmed = { tenantCode: tenantCode.trim(), email: email.trim(), password };
-    if (trimmed.tenantCode && trimmed.email && trimmed.password) {
-      setAuthError(false);
-      navigate("/dashboard", { replace: true });
+    if (!trimmed.tenantCode || !trimmed.email || !trimmed.password) {
+      setAuthError(true);
+      setErrorMessage(null);
       return;
     }
-    setAuthError(true);
+    setAuthError(false);
+    setErrorMessage(null);
+    setSubmitting(true);
+    try {
+      const code = trimmed.tenantCode;
+      const raw = await apiPost("/api/v1/session/login", {
+        email: trimmed.email,
+        password: trimmed.password,
+        tenantCode: code.length > 0 ? code : undefined,
+      });
+      persistAuthTokensFromResponse(raw);
+      await refresh();
+      navigate(fromPath, { replace: true });
+    } catch (err) {
+      const message =
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : "Sign-in failed. Try again.";
+      setErrorMessage(
+        message.includes("fetch") || message === "Failed to fetch"
+          ? "Cannot reach the API gateway. Start IACMS (e.g. api-gateway on port 3000) and check VITE_API_URL."
+          : message,
+      );
+      setAuthError(true);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (status === "loading") {
+    return (
+      <div className="font-body-md text-on-surface min-h-dvh flex flex-col items-center justify-center">
+        <span className="material-symbols-outlined text-4xl text-primary-container animate-pulse" aria-hidden>
+          progress_activity
+        </span>
+        <p className="text-sm text-on-surface-variant mt-4">Loading…</p>
+      </div>
+    );
   }
 
   return (
@@ -54,12 +110,13 @@ export default function LoginPage() {
                   <input
                     className="w-full px-3.5 py-3 text-sm bg-white border border-outline rounded-lg focus:ring-2 focus:ring-primary-container/20 focus:border-primary-container transition-all placeholder:text-outline-variant"
                     id="tenant_code"
-                    placeholder="e.g., AGENCY-742"
+                    placeholder="e.g., TEST-ORG"
                     type="text"
                     value={tenantCode}
                     onChange={(ev) => {
                       setTenantCode(ev.target.value);
                       setAuthError(false);
+                      setErrorMessage(null);
                     }}
                   />
                   <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
@@ -81,6 +138,7 @@ export default function LoginPage() {
                     onChange={(ev) => {
                       setEmail(ev.target.value);
                       setAuthError(false);
+                      setErrorMessage(null);
                     }}
                   />
                   <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
@@ -114,6 +172,7 @@ export default function LoginPage() {
                     onChange={(ev) => {
                       setPassword(ev.target.value);
                       setAuthError(false);
+                      setErrorMessage(null);
                     }}
                   />
                   <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
@@ -132,15 +191,17 @@ export default function LoginPage() {
                 {authError && (
                   <p className="text-sm text-error flex items-start gap-2 leading-relaxed mt-1">
                     <span className="material-symbols-outlined text-sm shrink-0">error</span>
-                    Enter tenant code, email, and password (demo proceeds to dashboard when all fields are filled).
+                    {errorMessage ??
+                      "Enter tenant code, email, and password. Use credentials from your IACMS seed (see backend README)."}
                   </p>
                 )}
               </div>
               <button
-                className="w-full bg-primary-container text-on-primary py-3.5 rounded-lg text-base font-semibold hover:bg-opacity-90 active:scale-[0.98] transition-all flex justify-center items-center gap-2 mt-1"
+                className="w-full bg-primary-container text-on-primary py-3.5 rounded-lg text-base font-semibold hover:bg-opacity-90 active:scale-[0.98] transition-all flex justify-center items-center gap-2 mt-1 disabled:opacity-60 disabled:pointer-events-none"
                 type="submit"
+                disabled={submitting}
               >
-                Sign In
+                {submitting ? "Signing in…" : "Sign In"}
                 <span className="material-symbols-outlined">arrow_forward</span>
               </button>
             </form>

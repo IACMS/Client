@@ -1,13 +1,86 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useSession } from "@/context/SessionContext";
+import CreateCaseModal from "@/components/CreateCaseModal";
+import { apiGet } from "@/lib/api";
+import type { ApiCase } from "@/lib/casesApi";
+
+function dashCount(value: number | null, loading: boolean): string {
+  if (loading) return "…";
+  if (value === null) return "—";
+  return String(value);
+}
 
 export default function DashboardPage() {
+  const { user } = useSession();
+  const navigate = useNavigate();
+  const greeting = [user?.firstName, user?.lastName].filter(Boolean).join(" ") || user?.email || "there";
+  const tenantId = user?.tenant?.id ?? "";
+  const [createCaseOpen, setCreateCaseOpen] = useState(false);
+
+  const [loading, setLoading] = useState(true);
+  const [caseCount, setCaseCount] = useState<number | null>(null);
+  const [referralCount, setReferralCount] = useState<number | null>(null);
+  const [workflowCount, setWorkflowCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      const results = { cases: null as number | null, ref: null as number | null, wf: null as number | null };
+      try {
+        const d = (await apiGet("/api/v1/cases")) as { cases?: ApiCase[] };
+        results.cases = Array.isArray(d.cases) ? d.cases.length : 0;
+      } catch {
+        results.cases = null;
+      }
+      try {
+        const d = (await apiGet("/api/v1/referrals")) as { referrals?: unknown[] };
+        results.ref = Array.isArray(d.referrals) ? d.referrals.length : 0;
+      } catch {
+        results.ref = null;
+      }
+      try {
+        const d = (await apiGet("/api/v1/workflows")) as { workflows?: unknown[] };
+        results.wf = Array.isArray(d.workflows) ? d.workflows.length : 0;
+      } catch {
+        results.wf = null;
+      }
+      if (!cancelled) {
+        setCaseCount(results.cases);
+        setReferralCount(results.ref);
+        setWorkflowCount(results.wf);
+        setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
       <div className="p-gutter max-w-7xl mx-auto space-y-gutter pb-8">
+        {tenantId && user?.id && (
+          <CreateCaseModal
+            open={createCaseOpen}
+            onClose={() => setCreateCaseOpen(false)}
+            tenantId={tenantId}
+            userId={user.id}
+            onCreated={(caseId) => navigate(`/cases/${encodeURIComponent(caseId)}`)}
+          />
+        )}
         <div className="flex justify-between items-end flex-wrap gap-4">
           <div>
-            <h2 className="font-h2 text-h2 text-primary leading-none">Institutional Overview</h2>
+            <h2 className="font-h2 text-h2 text-primary leading-none">Welcome, {greeting}</h2>
             <p className="text-slate-500 mt-1">
-              Operational health and inter-agency coordination summary for today.
+              {user?.tenant?.name ? (
+                <>
+                  Signed in under tenant <span className="font-semibold text-slate-700">{user.tenant.name}</span> (
+                  {user.tenant.code}).
+                </>
+              ) : (
+                "Operational health and inter-agency coordination summary for today."
+              )}
             </p>
           </div>
           <div className="flex gap-2 flex-wrap">
@@ -18,13 +91,15 @@ export default function DashboardPage() {
               <span className="material-symbols-outlined text-base">calendar_today</span>
               Last 24 Hours
             </button>
-            <Link
-              to="/cases"
-              className="px-4 py-2 bg-primary-container text-white rounded-md text-xs font-semibold hover:bg-teal-800 transition-colors flex items-center gap-2"
+            <button
+              type="button"
+              disabled={!tenantId || !user?.id}
+              onClick={() => setCreateCaseOpen(true)}
+              className="px-4 py-2 bg-primary-container text-white rounded-md text-xs font-semibold hover:bg-teal-800 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <span className="material-symbols-outlined text-base">add</span>
               New Case
-            </Link>
+            </button>
           </div>
         </div>
 
@@ -34,20 +109,15 @@ export default function DashboardPage() {
               <div className="p-2 bg-teal-50 rounded-lg">
                 <span className="material-symbols-outlined text-teal-700">folder_managed</span>
               </div>
-              <span className="text-[10px] font-bold text-teal-600 bg-teal-50 px-2 py-0.5 rounded-full">
-                +4.2% ↑
-              </span>
+              <Link to="/cases" className="text-[10px] font-bold text-teal-600 bg-teal-50 px-2 py-0.5 rounded-full hover:underline">
+                View cases
+              </Link>
             </div>
-            <h3 className="text-slate-500 text-sm font-label-caps tracking-wider">ACTIVE CASES</h3>
-            <p className="text-3xl font-bold text-teal-900 mt-1">1,284</p>
-            <div className="mt-4 flex items-center gap-2">
-              <div className="flex -space-x-2">
-                <div className="w-6 h-6 rounded-full bg-slate-200 border-2 border-white" />
-                <div className="w-6 h-6 rounded-full bg-slate-300 border-2 border-white" />
-                <div className="w-6 h-6 rounded-full bg-slate-400 border-2 border-white" />
-              </div>
-              <span className="text-[10px] text-slate-400">Assigned to 42 agents</span>
-            </div>
+            <h3 className="text-slate-500 text-sm font-label-caps tracking-wider">CASES</h3>
+            <p className="text-3xl font-bold text-teal-900 mt-1">{dashCount(caseCount, loading)}</p>
+            <p className="mt-4 text-[10px] text-slate-400">
+              {caseCount === null && !loading ? "No access or service unavailable." : "Total cases returned from the API."}
+            </p>
           </div>
 
           <div className="col-span-12 md:col-span-4 bg-white p-6 rounded-lg border border-slate-200 shadow-sm transition-all hover:shadow-md">
@@ -55,32 +125,29 @@ export default function DashboardPage() {
               <div className="p-2 bg-amber-50 rounded-lg">
                 <span className="material-symbols-outlined text-amber-600">move_to_inbox</span>
               </div>
-              <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
-                ACTION REQ
-              </span>
             </div>
-            <h3 className="text-slate-500 text-sm font-label-caps tracking-wider">PENDING REFERRALS</h3>
-            <p className="text-3xl font-bold text-teal-900 mt-1">142</p>
-            <div className="mt-4 w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-              <div className="bg-amber-400 h-full w-[65%]" />
-            </div>
-            <p className="text-[10px] text-slate-400 mt-2">65% assigned for initial review</p>
+            <h3 className="text-slate-500 text-sm font-label-caps tracking-wider">REFERRALS</h3>
+            <p className="text-3xl font-bold text-teal-900 mt-1">{dashCount(referralCount, loading)}</p>
+            <p className="mt-4 text-[10px] text-slate-400">
+              {referralCount === null && !loading
+                ? "No access or service unavailable."
+                : "Referrals visible to your account."}
+            </p>
           </div>
 
           <div className="col-span-12 md:col-span-4 bg-white p-6 rounded-lg border border-slate-200 shadow-sm transition-all hover:shadow-md">
             <div className="flex justify-between items-start mb-4">
               <div className="p-2 bg-emerald-50 rounded-lg">
-                <span className="material-symbols-outlined text-emerald-600">verified</span>
+                <span className="material-symbols-outlined text-emerald-600">account_tree</span>
               </div>
-              <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
-                STABLE
-              </span>
             </div>
-            <h3 className="text-slate-500 text-sm font-label-caps tracking-wider">SLA COMPLIANCE</h3>
-            <p className="text-3xl font-bold text-teal-900 mt-1">98.2%</p>
+            <h3 className="text-slate-500 text-sm font-label-caps tracking-wider">WORKFLOWS</h3>
+            <p className="text-3xl font-bold text-teal-900 mt-1">{dashCount(workflowCount, loading)}</p>
             <div className="mt-4 flex items-center gap-1">
-              <span className="material-symbols-outlined text-emerald-500 text-xs">history</span>
-              <span className="text-[10px] text-slate-400">Within targets for 12 weeks</span>
+              <span className="material-symbols-outlined text-emerald-500 text-xs">bolt</span>
+              <span className="text-[10px] text-slate-400">
+                {workflowCount === null && !loading ? "No access or service unavailable." : "Active workflow definitions."}
+              </span>
             </div>
           </div>
 

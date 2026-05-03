@@ -1,10 +1,19 @@
-import { NavLink } from "react-router-dom";
+import { Link, NavLink, useNavigate } from "react-router-dom";
+import { useSession } from "@/context/SessionContext";
 
 const AVATAR =
   "https://lh3.googleusercontent.com/aida-public/AB6AXuBV2ib7TtT1k_BFCUY7xGZUcQhPs164AcQhoSf4bkAr0t04NGWeFF0ZKlPZHHJzCIh7lHdArZ6crH3XCvwlLBouCesn_YhWxeuiZfIP1eq2MWxstjtPlkUaniP5PcPixY6iGeNjZceCvmvmyh13Ph-CcZfBjl9XC0EKt6yCI9_A_D9CjDAd8sfyD0Uc2t4yYeIeqJNO5d1S_B2yK3NyHrUPDkzAdsYzkpDUJUJzws5r94W6DZQTYI90HKcHlIo72ipQpO6nOKYU3Vk";
 
 /** Shared top chrome for portal routes (`/dashboard`, `/cases`, `/agencies`, case detail). */
 export default function PortalTopNav() {
+  const { user, logout } = useSession();
+  const navigate = useNavigate();
+
+  async function handleSignOut() {
+    await logout();
+    navigate("/login", { replace: true });
+  }
+
   return (
     <header className="relative z-50 bg-white dark:bg-slate-900 flex h-16 flex-nowrap items-center justify-between gap-3 px-4 sm:px-6 w-full shrink-0 sticky top-0 border-b border-slate-200 dark:border-slate-800 overflow-hidden">
       <div className="flex items-center gap-3 lg:gap-6 min-w-0 overflow-hidden flex-1">
@@ -67,17 +76,33 @@ export default function PortalTopNav() {
         <button type="button" className="text-slate-600 dark:text-slate-400 hover:bg-slate-50 p-2 rounded-full cursor-pointer transition-colors">
           <span className="material-symbols-outlined">notifications</span>
         </button>
-        <button type="button" className="text-slate-600 dark:text-slate-400 hover:bg-slate-50 p-2 rounded-full cursor-pointer transition-colors">
+        <Link
+          to="/settings"
+          className="text-slate-600 dark:text-slate-400 hover:bg-slate-50 p-2 rounded-full cursor-pointer transition-colors inline-flex"
+          aria-label="Account settings"
+        >
           <span className="material-symbols-outlined">settings</span>
-        </button>
+        </Link>
         <div className="h-8 w-px bg-slate-200 mx-2" />
         <button
           type="button"
-          className="hidden lg:flex items-center gap-2 px-2 sm:px-3 py-1.5 rounded-lg border border-outline hover:bg-slate-50 text-xs sm:text-sm font-medium font-inter text-on-surface max-w-[9rem]"
+          className="hidden lg:flex items-center gap-2 px-2 sm:px-3 py-1.5 rounded-lg border border-outline hover:bg-slate-50 text-xs sm:text-sm font-medium font-inter text-on-surface max-w-[12rem]"
+          title="Current tenant from session"
         >
-          <span className="truncate">Tenant Switcher</span>
-          <span className="material-symbols-outlined text-sm">expand_more</span>
+          <span className="truncate">{user?.tenant?.code ?? "Tenant"}</span>
+          <span className="material-symbols-outlined text-sm shrink-0">expand_more</span>
         </button>
+        <button
+          type="button"
+          className="hidden lg:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 border border-slate-200 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+          onClick={handleSignOut}
+        >
+          <span className="material-symbols-outlined text-sm">logout</span>
+          Sign out
+        </button>
+        <span className="hidden md:inline max-w-[12rem] truncate text-xs text-slate-600 dark:text-slate-400 font-medium" title={user?.email}>
+          {user?.email ?? ""}
+        </span>
         <img alt="" className="w-8 h-8 rounded-full border border-slate-200 object-cover" src={AVATAR} />
       </div>
     </header>
