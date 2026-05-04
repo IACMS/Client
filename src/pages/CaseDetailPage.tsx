@@ -1,16 +1,52 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import CaseReferralsPanel from "@/components/CaseReferralsPanel";
+import CaseTaskProgressView from "@/components/CaseTaskProgressView";
+import CaseWorkflowGuidePanel, { type WorkflowGuideStep } from "@/components/CaseWorkflowGuidePanel";
+import ExecuteTransitionModal from "@/components/ExecuteTransitionModal";
 import { useSession } from "@/context/SessionContext";
 import { ApiError, apiDelete, apiGet, apiPost } from "@/lib/api";
 import type { ApiCase } from "@/lib/casesApi";
 import { formatCaseUpdated, priorityDisplay, statusBadgeClass } from "@/lib/casesApi";
+import { fetchRbacRoles, roleNamesForIds, type RbacRoleRow } from "@/lib/workflowRoles";
 
 type CaseDetailResponse = { case?: ApiCase };
+
+type CaseHistoryRow = {
+  id: string;
+  transition?: { name?: string; id?: string } | null;
+  actor?: { firstName?: string; lastName?: string } | null;
+  comment?: string | null;
+  transitionedAt: string;
+  fromStep?: { id: string; name: string; key: string } | null;
+  toStep?: { id: string; name: string; key: string } | null;
+};
+
+type AvailableAction = {
+  id: string;
+  name: string;
+  toStepId: string;
+  requiresComment: boolean;
+  allowedRoleIds?: string[];
+  toStep?: { id: string; name: string; key: string } | null;
+};
+
 type CaseState = {
-  currentStep: { id: string; name: string; key: string; isInitial: boolean; isFinal: boolean };
-  availableActions: { id: string; name: string; toStepId: string; requiresComment: boolean }[];
-  history: { id: string; transition: any; actor: any; comment: string; transitionedAt: string }[];
+  currentStep: {
+    id: string;
+    name: string;
+    key: string;
+    isInitial: boolean;
+    isFinal: boolean;
+    requiresAttachment?: boolean;
+    allowedRoleIds?: string[];
+  } | null;
+  availableActions: AvailableAction[];
+  history: CaseHistoryRow[];
+  workflowGuide?: {
+    steps: WorkflowGuideStep[];
+    transitions: { id: string; name: string; fromStepId: string; toStepId: string }[];
+  } | null;
 };
 
 type ApiAssignmentRow = {
@@ -31,12 +67,13 @@ type ApiAttachmentRow = {
   fileSize: number;
   filePath: string;
   description?: string | null;
+  workflowStepId?: string | null;
   uploader?: { firstName?: string; lastName?: string };
 };
 
 type TenantUserOption = { id: string; email: string; firstName: string; lastName: string; isActive: boolean };
 
-type Tab = "summary" | "activity" | "referrals" | "assignment" | "attachments";
+type Tab = "summary" | "progress" | "activity" | "referrals" | "assignment" | "attachments";
 
 function formatBytes(n: number): string {
   if (!Number.isFinite(n) || n < 0) return "—";
@@ -64,6 +101,20 @@ export default function CaseDetailPage() {
   const [attachmentBusy, setAttachmentBusy] = useState(false);
   const [loadState, setLoadState] = useState<"loading" | "ok" | "error">("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [rbacRoles, setRbacRoles] = useState<RbacRoleRow[]>([]);
+  const [execModal, setExecModal] = useState<{
+    transitionId: string;
+    actionName: string;
+    targetStepName?: string;
+    requiresComment: boolean;
+  } | null>(null);
+  const [execSubmitting, setExecSubmitting] = useState(false);
+  const [execError, setExecError] = useState<string | null>(null);
+  const [postTransitionSuccess, setPostTransitionSuccess] = useState<{
+    transitionName: string;
+    destinationStepName?: string;
+  } | null>(null);
+  const [scrollNextActionsPending, setScrollNextActionsPending] = useState(false);
 
   const loadCase = useCallback(async () => {
     if (!decodedId) return;
@@ -110,6 +161,17 @@ export default function CaseDetailPage() {
   }, [loadCase]);
 
   useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const list = await fetchRbacRoles();
+      if (!cancelled) setRbacRoles(list);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     if (tab !== "assignment" || !decodedId) return;
     let cancelled = false;
     (async () => {
@@ -125,22 +187,52 @@ export default function CaseDetailPage() {
     };
   }, [tab, decodedId]);
 
-  const handleAction = async (actionId: string, requiresComment: boolean) => {
-    let comment = undefined;
-    if (requiresComment) {
-      comment = prompt("This transition requires a comment:");
-      if (!comment) return;
-    } else {
-      comment = prompt("Optional comment:") || undefined;
-    }
-    
+  useEffect(() => {
+    if (!scrollNextActionsPending || tab !== "progress") return;
+    const t = window.setTimeout(() => {
+      const el = document.getElementById("case-next-actions");
+      el?.scrollIntoView({ behavior: "smooth", block: "start" });
+      el?.focus({ preventScroll: true });
+      setScrollNextActionsPending(false);
+    }, 120);
+    return () => window.clearTimeout(t);
+  }, [tab, scrollNextActionsPending]);
+
+  const openExecuteModal = (action: AvailableAction) => {
+    setPostTransitionSuccess(null);
+    setExecError(null);
+    setExecModal({
+      transitionId: action.id,
+      actionName: action.name,
+      targetStepName: action.toStep?.name,
+      requiresComment: action.requiresComment,
+    });
+  };
+
+  const executeTransition = async (comment: string | undefined) => {
+    if (!execModal || !decodedId) return;
+    setExecError(null);
+    setExecSubmitting(true);
+    const snapshot = {
+      transitionName: execModal.actionName,
+      destinationStepName: execModal.targetStepName,
+    };
     try {
-      await apiPost(`/api/v1/cases/${decodedId}/transitions/${actionId}/execute`, { comment });
-      loadCase();
-    } catch (e: any) {
-      alert("Transition failed: " + (e.message || "Unknown error"));
+      await apiPost(`/api/v1/cases/${decodedId}/transitions/${execModal.transitionId}/execute`, { comment });
+      setExecModal(null);
+      await loadCase();
+      setPostTransitionSuccess(snapshot);
+    } catch (e) {
+      setExecError(e instanceof ApiError ? e.message : e instanceof Error ? e.message : "Transition failed.");
+    } finally {
+      setExecSubmitting(false);
     }
   };
+
+  function goToNextActions() {
+    setTab("progress");
+    setScrollNextActionsPending(true);
+  }
 
   const attachmentsCount = attachmentsList.length;
   const pr = caseRow ? priorityDisplay(caseRow.priority) : null;
@@ -193,6 +285,7 @@ export default function CaseDetailPage() {
         fileSize: attachmentFile.size,
         filePath: `/uploads/metadata-only/${filename}`,
         description: attachmentDesc.trim() || undefined,
+        ...(caseState?.currentStep?.id ? { workflowStepId: caseState.currentStep.id } : {}),
       });
       setAttachmentDesc("");
       setAttachmentFile(null);
@@ -213,6 +306,33 @@ export default function CaseDetailPage() {
       alert(e instanceof ApiError ? e.message : "Delete failed.");
     }
   };
+
+  const stepRoleLabels = useMemo(() => {
+    const ids = caseState?.currentStep?.allowedRoleIds;
+    return roleNamesForIds(rbacRoles, ids);
+  }, [caseState?.currentStep?.allowedRoleIds, rbacRoles]);
+
+  const stepNameById = useMemo(() => {
+    const steps = caseState?.workflowGuide?.steps;
+    if (!steps?.length) return new Map<string, string>();
+    return new Map(steps.map((s) => [s.id, s.name]));
+  }, [caseState?.workflowGuide?.steps]);
+
+  const attachmentBlocked = useMemo(() => {
+    const cid = caseState?.currentStep?.id;
+    if (!cid || !caseState?.currentStep?.requiresAttachment) return false;
+    return attachmentsList.filter((a) => a.workflowStepId === cid).length < 1;
+  }, [attachmentsList, caseState?.currentStep?.id, caseState?.currentStep?.requiresAttachment]);
+
+  const currentStepAttachmentCount = useMemo(() => {
+    const cid = caseState?.currentStep?.id;
+    if (!cid) return 0;
+    return attachmentsList.filter((a) => a.workflowStepId === cid).length;
+  }, [attachmentsList, caseState?.currentStep?.id]);
+
+  const caseClosed = (caseRow?.status ?? "").toLowerCase() === "closed";
+
+  const transitionRoleLabels = useCallback((ids?: string[]) => roleNamesForIds(rbacRoles, ids), [rbacRoles]);
 
   if (loadState === "loading") {
     return (
@@ -246,6 +366,16 @@ export default function CaseDetailPage() {
 
   return (
     <div className="flex-1 p-lg max-w-7xl w-full mx-auto pb-10">
+      <ExecuteTransitionModal
+        open={!!execModal}
+        onClose={() => !execSubmitting && setExecModal(null)}
+        actionName={execModal?.actionName ?? ""}
+        targetStepName={execModal?.targetStepName}
+        requiresComment={execModal?.requiresComment ?? false}
+        submitting={execSubmitting}
+        error={execError}
+        onExecute={(c) => void executeTransition(c)}
+      />
       <div className="mb-lg">
         <nav className="flex text-label-caps text-secondary mb-2 uppercase tracking-widest flex-wrap gap-x-1">
           <Link to="/cases" className="hover:text-primary">
@@ -271,9 +401,59 @@ export default function CaseDetailPage() {
         </div>
       </div>
 
+      {postTransitionSuccess && (
+        <div
+          className="mb-lg rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3 shadow-sm"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="flex items-start gap-2 flex-1 min-w-0">
+            <span className="material-symbols-outlined text-teal-700 shrink-0" aria-hidden>
+              check_circle
+            </span>
+            <div>
+              <p className="font-semibold text-teal-900">Transition complete</p>
+              <p className="text-sm text-teal-900/90 mt-0.5">
+                <span className="font-semibold">{postTransitionSuccess.transitionName}</span>
+                {postTransitionSuccess.destinationStepName ? (
+                  <>
+                    {" "}
+                    finished — the case is now on{" "}
+                    <span className="font-semibold">{postTransitionSuccess.destinationStepName}</span>.
+                  </>
+                ) : (
+                  <> finished — the case has advanced to the next step.</>
+                )}
+              </p>
+              <p className="text-xs text-teal-800/80 mt-2">
+                Use <strong>View next actions</strong> to jump to the transitions you can run from here.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => goToNextActions()}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-teal-700 text-white text-sm font-semibold hover:bg-teal-800 transition-colors shadow-sm"
+            >
+              <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
+              View next actions
+            </button>
+            <button
+              type="button"
+              onClick={() => setPostTransitionSuccess(null)}
+              className="inline-flex items-center justify-center px-4 py-2 rounded-lg border border-teal-300 text-teal-900 text-sm font-semibold hover:bg-teal-100/80 transition-colors"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="bg-surface-container-lowest border border-outline-variant rounded-xl overflow-hidden min-h-[600px] flex flex-col shadow-sm">
         <div className="flex border-b border-outline-variant bg-surface-container-low overflow-x-auto">
           <TabBtn id="summary" active={tab} setTab={setTab} label="SUMMARY" />
+          <TabBtn id="progress" active={tab} setTab={setTab} label="TASK PROGRESS" />
           <TabBtn id="activity" active={tab} setTab={setTab} label="ACTIVITY LOG" />
           <TabBtn id="referrals" active={tab} setTab={setTab} label="REFERRALS" />
           <TabBtn
@@ -291,6 +471,22 @@ export default function CaseDetailPage() {
             label={attachmentsCount > 0 ? `ATTACHMENTS (${attachmentsCount})` : "ATTACHMENTS"}
           />
         </div>
+
+        {tab === "progress" &&
+          (caseState ? (
+            <CaseTaskProgressView
+              guide={caseState.workflowGuide}
+              availableActions={caseState.availableActions}
+              history={caseState.history}
+              attachmentBlocked={attachmentBlocked}
+              currentStepAttachmentCount={currentStepAttachmentCount}
+              caseClosed={caseClosed}
+              onExecuteAction={openExecuteModal}
+              transitionRoleLabels={transitionRoleLabels}
+            />
+          ) : (
+            <div className="p-lg text-center text-secondary">Loading workflow state…</div>
+          ))}
 
         {tab === "summary" && (
           <div className="p-lg grid grid-cols-12 gap-lg flex-1">
@@ -374,14 +570,67 @@ export default function CaseDetailPage() {
                     bolt
                   </span>
                 </h3>
-                
-                {caseState?.currentStep ? (
-                  <div className="mb-6">
-                    <p className="text-xs text-slate-500 font-label-caps mb-1">CURRENT STEP</p>
-                    <p className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                      {caseState.currentStep.name}
-                      {caseState.currentStep.isFinal && <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full uppercase">Terminal</span>}
+
+                {(caseRow.workflow || caseRow.workflowId) && (
+                  <div className="mb-4 text-xs text-slate-600 space-y-1">
+                    <p>
+                      <span className="font-label-caps text-slate-500">Definition</span>{" "}
+                      <span className="font-semibold text-slate-800">{caseRow.workflow?.name ?? "—"}</span>
+                      {caseRow.workflow?.key ? (
+                        <span className="font-mono text-slate-500 ml-1">({caseRow.workflow.key})</span>
+                      ) : null}
                     </p>
+                    <p>
+                      <span className="font-label-caps text-slate-500">Pinned version</span>{" "}
+                      <span className="font-mono font-semibold">v{caseRow.workflowVersion ?? caseRow.workflow?.version ?? "—"}</span>
+                      {caseRow.workflow?.status ? (
+                        <span className="ml-2 text-slate-500">· {caseRow.workflow.status}</span>
+                      ) : null}
+                    </p>
+                  </div>
+                )}
+
+                <CaseWorkflowGuidePanel guide={caseState?.workflowGuide} />
+                {caseState?.workflowGuide?.steps?.length ? (
+                  <button
+                    type="button"
+                    onClick={() => setTab("progress")}
+                    className="w-full mt-2 mb-4 py-2.5 text-sm font-semibold text-teal-800 bg-teal-50 border border-teal-200 rounded-lg hover:bg-teal-100 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">account_tree</span>
+                    Open full task progress view
+                  </button>
+                ) : null}
+
+                {caseState?.currentStep ? (
+                  <div className="mb-4">
+                    <p className="text-xs text-slate-500 font-label-caps mb-1">CURRENT STEP</p>
+                    <p className="text-lg font-bold text-slate-800 flex items-center gap-2 flex-wrap">
+                      {caseState.currentStep.name}
+                      {caseState.currentStep.isFinal && (
+                        <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full uppercase">Terminal</span>
+                      )}
+                      {caseState.currentStep.requiresAttachment && (
+                        <span className="text-[10px] bg-teal-100 text-teal-900 px-2 py-0.5 rounded-full uppercase">
+                          Needs file
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-[11px] text-slate-500 font-mono mt-1">key: {caseState.currentStep.key}</p>
+                    {caseState.currentStep.requiresAttachment && attachmentBlocked && (
+                      <p className="text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-lg p-2 mt-2">
+                        Upload at least one attachment while on this step (Attachments tab) before you can take any outbound
+                        action.
+                      </p>
+                    )}
+                    {stepRoleLabels.length > 0 ? (
+                      <p className="text-xs text-slate-600 mt-2">
+                        <span className="font-label-caps text-slate-500">Step roles</span>{" "}
+                        {stepRoleLabels.join(", ")}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-slate-500 mt-2">No step-level role restriction (all roles may apply).</p>
+                    )}
                   </div>
                 ) : (
                   <p className="text-sm opacity-90 mb-6 text-slate-500">Workflow engine not started or case is legacy.</p>
@@ -391,16 +640,36 @@ export default function CaseDetailPage() {
                   <div>
                     <p className="text-xs text-slate-500 font-label-caps mb-3">AVAILABLE ACTIONS</p>
                     <div className="flex flex-col gap-2">
-                      {caseState.availableActions.map(action => (
-                        <button
-                          key={action.id}
-                          onClick={() => handleAction(action.id, action.requiresComment)}
-                          className="bg-primary text-white w-full py-2.5 rounded text-sm font-semibold hover:bg-teal-700 transition-colors flex justify-center items-center gap-2 shadow-sm"
-                        >
-                          {action.name}
-                          <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
-                        </button>
-                      ))}
+                      {caseState.availableActions.map((action) => {
+                        const restricted =
+                          Array.isArray(action.allowedRoleIds) && action.allowedRoleIds.length > 0;
+                        return (
+                          <div key={action.id} className="space-y-1">
+                            <button
+                              type="button"
+                              disabled={attachmentBlocked || caseClosed}
+                              onClick={() => openExecuteModal(action)}
+                              className="bg-primary text-white w-full py-2.5 rounded text-sm font-semibold hover:bg-teal-700 transition-colors flex justify-center items-center gap-2 shadow-sm disabled:opacity-45 disabled:pointer-events-none"
+                            >
+                              <span className="text-left">
+                                {action.name}
+                                {action.toStep?.name ? (
+                                  <>
+                                    {" "}
+                                    <span className="opacity-90">→ {action.toStep.name}</span>
+                                  </>
+                                ) : null}
+                              </span>
+                              <span className="material-symbols-outlined text-[16px] shrink-0">arrow_forward</span>
+                            </button>
+                            {restricted ? (
+                              <p className="text-[10px] text-slate-500 px-1">
+                                Restricted: {roleNamesForIds(rbacRoles, action.allowedRoleIds).join(", ")}
+                              </p>
+                            ) : null}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -419,7 +688,14 @@ export default function CaseDetailPage() {
                     {attachmentsList.map((att) => (
                       <li key={att.id}>
                         <span className="text-body-sm font-medium">{att.originalFilename ?? att.filename}</span>
-                        <span className="text-xs text-secondary block">{formatBytes(att.fileSize)}</span>
+                        <span className="text-xs text-secondary block">
+                          {formatBytes(att.fileSize)}
+                          {att.workflowStepId ? (
+                            <span className="block text-teal-800 mt-0.5">
+                              Step: {stepNameById.get(att.workflowStepId) ?? att.workflowStepId.slice(0, 8) + "…"}
+                            </span>
+                          ) : null}
+                        </span>
                       </li>
                     ))}
                   </ul>
@@ -444,15 +720,30 @@ export default function CaseDetailPage() {
                           <span className="material-symbols-outlined text-[16px] text-primary">swap_calls</span>
                         </div>
                         <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
-                          <div className="flex justify-between items-start mb-2">
-                            <span className="font-semibold text-slate-800">{item.transition ? item.transition.name : 'System Action'}</span>
-                            <span className="text-xs text-slate-400">{formatCaseUpdated(item.transitionedAt)}</span>
+                          <div className="flex justify-between items-start mb-2 gap-2">
+                            <span className="font-semibold text-slate-800">
+                              {item.transition ? item.transition.name : "Case opened"}
+                            </span>
+                            <span className="text-xs text-slate-400 shrink-0">{formatCaseUpdated(item.transitionedAt)}</span>
                           </div>
+                          {(item.fromStep || item.toStep) && (
+                            <p className="text-xs text-teal-800 font-medium mb-2">
+                              {item.fromStep ? (
+                                <>
+                                  {item.fromStep.name}
+                                  <span className="text-slate-400 font-normal mx-1">→</span>
+                                </>
+                              ) : (
+                                <span className="text-slate-500">Start → </span>
+                              )}
+                              {item.toStep ? item.toStep.name : "—"}
+                            </p>
+                          )}
                           {item.comment && (
-                            <p className="text-sm text-slate-600 bg-slate-50 p-2 rounded mb-2 italic">"{item.comment}"</p>
+                            <p className="text-sm text-slate-600 bg-slate-50 p-2 rounded mb-2 italic">&quot;{item.comment}&quot;</p>
                           )}
                           <p className="text-xs text-slate-400">
-                            By: {item.actor ? `${item.actor.firstName} ${item.actor.lastName}` : 'Unknown'}
+                            By: {item.actor ? `${item.actor.firstName} ${item.actor.lastName}` : "Unknown"}
                           </p>
                         </div>
                       </div>
@@ -565,7 +856,8 @@ export default function CaseDetailPage() {
               Attachments
             </h3>
             <p className="text-sm text-secondary">
-              Registers file metadata with the case service (binary upload pipeline can replace the stub path later).
+              Files are linked to the case&apos;s <strong>current workflow step</strong> automatically so steps that require
+              evidence can block moving forward until at least one attachment exists for that step.
             </p>
             <div className="bg-white border border-outline-variant rounded-lg p-md shadow-sm space-y-md">
               <input
@@ -601,6 +893,12 @@ export default function CaseDetailPage() {
                         {att.uploader
                           ? ` · ${`${att.uploader.firstName ?? ""} ${att.uploader.lastName ?? ""}`.trim() || "Uploader"}`
                           : ""}
+                        {att.workflowStepId ? (
+                          <span className="block text-teal-800 mt-1">
+                            Workflow step:{" "}
+                            {stepNameById.get(att.workflowStepId) ?? att.workflowStepId.slice(0, 8) + "…"}
+                          </span>
+                        ) : null}
                       </p>
                       {att.description && <p className="text-sm text-slate-600 mt-1">{att.description}</p>}
                     </div>

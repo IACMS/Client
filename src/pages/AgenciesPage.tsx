@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 import { useSession } from "@/context/SessionContext";
 import RequestPartnershipModal from "@/components/RequestPartnershipModal";
+import CreateAgencyModal from "@/components/CreateAgencyModal";
 import { ApiError, apiGet } from "@/lib/api";
 import type { ApiCase } from "@/lib/casesApi";
 
@@ -59,6 +60,8 @@ export default function AgenciesPage() {
   const [tenantDetail, setTenantDetail] = useState<TenantApi | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [partnershipOpen, setPartnershipOpen] = useState(false);
+  const [createAgencyOpen, setCreateAgencyOpen] = useState(false);
+  const [lastCreatedAgency, setLastCreatedAgency] = useState<{ code: string; name: string } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -110,6 +113,11 @@ export default function AgenciesPage() {
           userId={user.id}
         />
       )}
+      <CreateAgencyModal
+        open={createAgencyOpen}
+        onClose={() => setCreateAgencyOpen(false)}
+        onCreated={({ code, name }) => setLastCreatedAgency({ code, name })}
+      />
       <div className="mb-8">
         <div className="flex items-center gap-2 text-slate-500 font-label-caps text-xs mb-2 flex-wrap">
           <span>PORTAL</span>
@@ -125,17 +133,45 @@ export default function AgenciesPage() {
               Your session tenant from the IACMS gateway. Full multi-tenant directory requires additional APIs.
             </p>
           </div>
-          <button
-            type="button"
-            disabled={!tenantId || !user?.id}
-            onClick={() => setPartnershipOpen(true)}
-            className="bg-primary text-white px-6 py-2.5 rounded-lg font-semibold flex items-center gap-2 hover:bg-primary-container transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <span className="material-symbols-outlined">domain_add</span>
-            Request partnership
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={!user}
+              onClick={() => setCreateAgencyOpen(true)}
+              className="bg-white text-primary border-2 border-primary px-5 py-2.5 rounded-lg font-semibold flex items-center gap-2 hover:bg-slate-50 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <span className="material-symbols-outlined">add_business</span>
+              Register new agency
+            </button>
+            <button
+              type="button"
+              disabled={!tenantId || !user?.id}
+              onClick={() => setPartnershipOpen(true)}
+              className="bg-primary text-white px-6 py-2.5 rounded-lg font-semibold flex items-center gap-2 hover:bg-primary-container transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <span className="material-symbols-outlined">domain_add</span>
+              Request partnership
+            </button>
+          </div>
         </div>
       </div>
+
+      {lastCreatedAgency && (
+        <div className="mb-6 p-4 rounded-xl border border-teal-200 bg-teal-50 text-teal-900 text-sm flex flex-wrap items-center justify-between gap-3">
+          <p>
+            <span className="font-semibold">Recently registered:</span> {lastCreatedAgency.name}{" "}
+            <span className="font-mono">({lastCreatedAgency.code})</span> — share the tenant code and password with the
+            new administrator.
+          </p>
+          <button
+            type="button"
+            className="text-sm font-semibold text-teal-800 underline hover:no-underline"
+            onClick={() => setLastCreatedAgency(null)}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-gutter mb-8">
         <Stat label="REGISTERED (SESSION)" value={tenant ? "1" : "0"} sub="Tenant on your login" />

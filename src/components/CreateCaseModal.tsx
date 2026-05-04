@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ApiError, apiGet, apiPost } from "@/lib/api";
 
-type WorkflowRow = { id: string; name: string; isActive?: boolean };
+type WorkflowRow = { id: string; name: string; key?: string; version?: number; status?: string; isActive?: boolean };
 
 type Props = {
   open: boolean;
@@ -13,11 +13,7 @@ type Props = {
   onCreated?: (caseId: string) => void;
 };
 
-function makeCaseNumber(): string {
-  return `IAC-${Date.now()}-${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
-}
-
-export default function CreateCaseModal({ open, onClose, tenantId, userId, onCreated }: Props) {
+export default function CreateCaseModal({ open, onClose, tenantId, userId: _userId, onCreated }: Props) {
   const navigate = useNavigate();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -36,9 +32,12 @@ export default function CreateCaseModal({ open, onClose, tenantId, userId, onCre
     (async () => {
       setLoadingWf(true);
       try {
-        const q = new URLSearchParams({ tenantId });
+        const q = new URLSearchParams({ tenantId, status: "PUBLISHED" });
         const data = (await apiGet(`/api/v1/workflows?${q}`)) as { workflows?: WorkflowRow[] };
-        if (!cancelled) setWorkflows(Array.isArray(data.workflows) ? data.workflows.filter((w) => w.isActive !== false) : []);
+        if (!cancelled)
+          setWorkflows(
+            Array.isArray(data.workflows) ? data.workflows.filter((w) => w.isActive !== false) : [],
+          );
       } catch {
         if (!cancelled) setWorkflows([]);
       } finally {
@@ -70,23 +69,21 @@ export default function CreateCaseModal({ open, onClose, tenantId, userId, onCre
       setError("Title is required.");
       return;
     }
+    const wf = workflowId.trim();
+    if (!wf) {
+      setError("Select a published workflow. Cases are created on a workflow with an initial step.");
+      return;
+    }
     setError(null);
     setSubmitting(true);
     try {
-      const caseNumber = makeCaseNumber();
-      const base = {
-        tenantId,
-        createdBy: userId,
-        caseNumber,
+      const body: Record<string, string> = {
+        workflowId: wf,
         title: t,
         type: type.trim() || "internal",
         priority: priority.trim() || "normal",
-        ...(description.trim() ? { description: description.trim() } : {}),
       };
-      const body =
-        workflowId.trim().length > 0
-          ? { ...base, workflowId: workflowId.trim() }
-          : { ...base, status: "open" };
+      if (description.trim()) body.description = description.trim();
 
       const raw = (await apiPost("/api/v1/cases", body)) as { case?: { id?: string } };
       const id = raw.case?.id;
@@ -196,7 +193,7 @@ export default function CreateCaseModal({ open, onClose, tenantId, userId, onCre
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-600 mb-1" htmlFor="cc-wf">
-              Workflow (optional)
+              Workflow <span className="text-red-600">*</span>
             </label>
             <select
               id="cc-wf"
@@ -204,15 +201,21 @@ export default function CreateCaseModal({ open, onClose, tenantId, userId, onCre
               value={workflowId}
               onChange={(e) => setWorkflowId(e.target.value)}
               disabled={loadingWf}
+              required
             >
-              <option value="">None — use default open status</option>
+              <option value="">{loadingWf ? "Loading…" : "Select a published workflow…"}</option>
               {workflows.map((w) => (
                 <option key={w.id} value={w.id}>
                   {w.name}
+                  {typeof w.version === "number" ? ` (v${w.version})` : ""}
+                  {w.key ? ` — ${w.key}` : ""}
                 </option>
               ))}
             </select>
-            {loadingWf && <p className="text-[11px] text-slate-500 mt-1">Loading workflows…</p>}
+            <p className="text-[11px] text-slate-500 mt-1">Only published workflows are listed. The case pins this workflow version.</p>
+            {!loadingWf && workflows.length === 0 && (
+              <p className="text-[11px] text-amber-700 mt-1">No published workflows for this tenant. Publish one under Workflows first.</p>
+            )}
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <button
@@ -224,7 +227,7 @@ export default function CreateCaseModal({ open, onClose, tenantId, userId, onCre
             </button>
             <button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || !workflowId.trim() || workflows.length === 0}
               className="px-4 py-2 text-sm font-semibold bg-primary-container text-white rounded-lg disabled:opacity-50"
             >
               {submitting ? "Creating…" : "Create"}

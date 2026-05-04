@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useSession } from "@/context/SessionContext";
-import { apiGet, apiPost } from "@/lib/api";
+import { apiGet } from "@/lib/api";
+import CreateWorkflowModal from "@/components/CreateWorkflowModal";
 
 type ApiWorkflow = {
   id: string;
@@ -21,7 +22,8 @@ export default function WorkflowsPage() {
   const navigate = useNavigate();
   const [workflows, setWorkflows] = useState<ApiWorkflow[]>([]);
   const [loadState, setLoadState] = useState<"loading" | "ok" | "error">("loading");
-  
+  const [createOpen, setCreateOpen] = useState(false);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -42,26 +44,14 @@ export default function WorkflowsPage() {
     return () => { cancelled = true; };
   }, [tenantId]);
 
-  const handleCreateDraft = async () => {
-    const name = prompt("Workflow Name:");
-    if (!name) return;
-    const key = name.toLowerCase().replace(/[^a-z0-9]/g, '-');
-    try {
-      const res = await apiPost('/api/v1/workflows', {
-        name,
-        key,
-        tenantId,
-        createdBy: user?.id,
-        description: 'New workflow draft'
-      }) as { workflow: ApiWorkflow };
-      navigate(`/workflows/${res.workflow.id}/designer`);
-    } catch (e) {
-      alert("Failed to create workflow.");
-    }
-  };
-
   return (
     <div className="p-gutter max-w-7xl mx-auto w-full pb-10">
+      <CreateWorkflowModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        userId={user?.id}
+        onCreated={(wf) => navigate(`/workflows/${wf.id}/designer`)}
+      />
       <div className="mb-8 flex justify-between items-end flex-wrap gap-4">
         <div>
           <div className="flex items-center gap-2 text-slate-500 font-label-caps text-xs mb-2 flex-wrap">
@@ -73,11 +63,13 @@ export default function WorkflowsPage() {
           <p className="font-body-md text-slate-600 mt-1">Design and publish cross-agency lifecycle engines.</p>
         </div>
         <button
-          onClick={handleCreateDraft}
-          className="bg-primary text-white px-6 py-2.5 rounded-lg font-semibold flex items-center gap-2 hover:bg-primary-container transition-all shadow-sm"
+          type="button"
+          onClick={() => setCreateOpen(true)}
+          disabled={!tenantId}
+          className="bg-primary text-white px-6 py-2.5 rounded-lg font-semibold flex items-center gap-2 hover:bg-primary-container transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <span className="material-symbols-outlined">add</span>
-          Create Workflow
+          Create workflow
         </button>
       </div>
 
@@ -106,8 +98,17 @@ export default function WorkflowsPage() {
             </div>
           ))}
           {workflows.length === 0 && (
-            <div className="col-span-full bg-slate-50 border border-dashed border-slate-300 rounded-xl p-12 text-center">
-              <p className="text-slate-500">No workflows found. Create one to get started.</p>
+            <div className="col-span-full bg-slate-50 border border-dashed border-slate-300 rounded-xl p-12 text-center space-y-4">
+              <p className="text-slate-500">No workflows found. Create a draft to get started.</p>
+              <button
+                type="button"
+                onClick={() => setCreateOpen(true)}
+                disabled={!tenantId}
+                className="inline-flex items-center gap-2 bg-primary text-white px-5 py-2 rounded-lg font-semibold hover:bg-primary-container disabled:opacity-50"
+              >
+                <span className="material-symbols-outlined text-lg">add</span>
+                Create workflow
+              </button>
             </div>
           )}
         </div>

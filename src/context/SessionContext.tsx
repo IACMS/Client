@@ -21,7 +21,9 @@ export type SessionUser = {
   email: string;
   firstName?: string;
   lastName?: string;
+  /** Cookie session includes nested tenant; JWT auth returns flat tenantId from `/session/status`. */
   tenant?: SessionTenant;
+  tenantId?: string;
 };
 
 type SessionStatusPayload = {

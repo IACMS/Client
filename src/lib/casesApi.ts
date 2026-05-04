@@ -18,6 +18,24 @@ export type ApiCaseCreator = {
   email?: string;
 };
 
+export type ApiCaseWorkflow = {
+  id: string;
+  name: string;
+  key: string;
+  version: number;
+  status?: string;
+};
+
+export type ApiCaseCurrentStep = {
+  id: string;
+  name: string;
+  key: string;
+  isInitial?: boolean;
+  isFinal?: boolean;
+  requiresAttachment?: boolean;
+  allowedRoleIds?: string[];
+};
+
 export type ApiCase = {
   id: string;
   tenantId?: string;
@@ -33,6 +51,10 @@ export type ApiCase = {
   createdBy?: string;
   assignedTo?: string | null;
   workflowId?: string | null;
+  workflowVersion?: number;
+  currentStepId?: string | null;
+  workflow?: ApiCaseWorkflow | null;
+  currentStep?: ApiCaseCurrentStep | null;
   tenant?: ApiCaseTenant | null;
   creator?: ApiCaseCreator | null;
   assignee?: ApiCaseCreator | null;

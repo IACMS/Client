@@ -172,6 +172,10 @@ export async function apiPatch(path: string, json: unknown): Promise<unknown> {
   return apiFetch(path, { method: "PATCH", body: JSON.stringify(json) });
 }
 
+export async function apiPut(path: string, json: unknown): Promise<unknown> {
+  return apiFetch(path, { method: "PUT", body: JSON.stringify(json) });
+}
+
 export async function apiDelete(path: string): Promise<unknown> {
   return apiFetch(path, { method: "DELETE" });
 }
