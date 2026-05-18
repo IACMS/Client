@@ -9,6 +9,11 @@ export type ProgressAvailableAction = {
   requiresComment: boolean;
   allowedRoleIds?: string[];
   toStep?: { id: string; name: string; key: string } | null;
+  timeLimitType?: string;
+  timeLimitAmount?: number | null;
+  timeLimitUnit?: string | null;
+  deadlineAt?: string | null;
+  isPastDue?: boolean;
 };
 
 type HistoryRow = {
@@ -36,6 +41,27 @@ type Props = {
   onExecuteAction: (action: ProgressAvailableAction) => void;
   transitionRoleLabels: (ids?: string[]) => string[];
 };
+
+function progressTimingCaption(action: ProgressAvailableAction): string | null {
+  const type = action.timeLimitType;
+  const amt = action.timeLimitAmount;
+  const unit = action.timeLimitUnit;
+  if (!type || type === "NONE" || amt == null || amt < 1 || (unit !== "HOURS" && unit !== "DAYS")) return null;
+  const unitLabel = unit === "DAYS" ? "day(s)" : "hour(s)";
+  const label = type === "DEADLINE" ? "Deadline" : "Suggested target";
+  if (action.deadlineAt) {
+    const when = new Date(action.deadlineAt);
+    const overdue = action.isPastDue;
+    const suffix =
+      overdue && type === "DEADLINE"
+        ? " — exceeded; blocked."
+        : overdue
+          ? " — exceeded (not enforced)."
+          : "";
+    return `${label}: ${when.toLocaleString()}${suffix}`;
+  }
+  return `${label}: within ${amt} ${unitLabel} of step start`;
+}
 
 export default function CaseTaskProgressView({
   guide,
@@ -246,11 +272,13 @@ export default function CaseTaskProgressView({
               <ul className="space-y-2">
                 {availableActions.map((action) => {
                   const restricted = Array.isArray(action.allowedRoleIds) && action.allowedRoleIds.length > 0;
+                  const deadlineBlocked = action.timeLimitType === "DEADLINE" && Boolean(action.isPastDue);
+                  const timingLine = progressTimingCaption(action);
                   return (
                     <li key={action.id}>
                       <button
                         type="button"
-                        disabled={attachmentBlocked || caseClosed}
+                        disabled={attachmentBlocked || caseClosed || deadlineBlocked}
                         onClick={() => onExecuteAction(action)}
                         className="w-full text-left rounded-lg border border-teal-200 bg-teal-50/80 hover:bg-teal-100 px-3 py-2.5 transition-colors disabled:opacity-45 disabled:pointer-events-none"
                       >
@@ -261,6 +289,19 @@ export default function CaseTaskProgressView({
                         {action.requiresComment && (
                           <span className="text-[11px] text-slate-600 block mt-1">Comment required to confirm.</span>
                         )}
+                        {timingLine ? (
+                          <span
+                            className={`text-[11px] block mt-1 ${
+                              action.isPastDue && action.timeLimitType === "DEADLINE"
+                                ? "text-red-700"
+                                : action.isPastDue
+                                  ? "text-amber-800"
+                                  : "text-slate-600"
+                            }`}
+                          >
+                            {timingLine}
+                          </span>
+                        ) : null}
                       </button>
                       {restricted && (
                         <p className="text-[10px] text-slate-500 mt-1 px-1">

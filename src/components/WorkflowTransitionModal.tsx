@@ -1,6 +1,11 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { ApiError, apiPost, apiPut } from "@/lib/api";
-import { fetchRbacRoles, type RbacRoleRow } from "@/lib/workflowRoles";
+import {
+  fetchRbacRoles,
+  prepareRolesForWorkflowPickers,
+  humanizeRoleName,
+  type RbacRoleRow,
+} from "@/lib/workflowRoles";
 
 export type WorkflowTransitionEditPayload = {
   id: string;
@@ -10,6 +15,9 @@ export type WorkflowTransitionEditPayload = {
   toStepId: string;
   requiresComment: boolean;
   allowedRoleIds?: string[];
+  timeLimitType?: string;
+  timeLimitAmount?: number | null;
+  timeLimitUnit?: string | null;
 };
 
 export type ChainTransitionOption = { id: string; toStepId: string; label: string };
@@ -19,6 +27,7 @@ type StepOption = { id: string; key: string; name: string; isFinal?: boolean };
 type Props = {
   open: boolean;
   onClose: () => void;
+  workflowTenantId?: string;
   workflowId: string;
   steps: StepOption[];
   /** When set, “Add transition” can start from another transition’s destination step. */
@@ -49,7 +58,7 @@ function RolePicker({
             checked={selectedIds.includes(r.id)}
             onChange={() => onToggle(r.id)}
           />
-          <span className="font-mono text-xs">{r.name}</span>
+          <span className="text-sm">{humanizeRoleName(r.name)}</span>
         </label>
       ))}
     </div>
@@ -59,6 +68,7 @@ function RolePicker({
 export default function WorkflowTransitionModal({
   open,
   onClose,
+  workflowTenantId,
   workflowId,
   steps,
   chainTransitionOptions = [],
@@ -73,6 +83,9 @@ export default function WorkflowTransitionModal({
   const [chainTransitionId, setChainTransitionId] = useState("");
   const [toMode, setToMode] = useState<"step" | "terminal">("step");
   const [requiresComment, setRequiresComment] = useState(false);
+  const [timeLimitType, setTimeLimitType] = useState<"NONE" | "RECOMMENDATION" | "DEADLINE">("NONE");
+  const [timeLimitAmount, setTimeLimitAmount] = useState("");
+  const [timeLimitUnit, setTimeLimitUnit] = useState<"HOURS" | "DAYS">("DAYS");
   const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([]);
   const [roles, setRoles] = useState<RbacRoleRow[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -86,13 +99,17 @@ export default function WorkflowTransitionModal({
     if (!open) return;
     let cancelled = false;
     void (async () => {
-      const list = await fetchRbacRoles();
+      if (!workflowTenantId) {
+        if (!cancelled) setRoles([]);
+        return;
+      }
+      const list = prepareRolesForWorkflowPickers(await fetchRbacRoles({ tenantId: workflowTenantId }));
       if (!cancelled) setRoles(list);
     })();
     return () => {
       cancelled = true;
     };
-  }, [open]);
+  }, [open, workflowTenantId]);
 
   useEffect(() => {
     if (!open) return;
@@ -106,6 +123,20 @@ export default function WorkflowTransitionModal({
       setToStepId(editTransition.toStepId);
       setRequiresComment(editTransition.requiresComment);
       setSelectedRoleIds([...(editTransition.allowedRoleIds ?? [])]);
+      const tl = editTransition.timeLimitType === "RECOMMENDATION" || editTransition.timeLimitType === "DEADLINE"
+        ? editTransition.timeLimitType
+        : "NONE";
+      setTimeLimitType(tl);
+      setTimeLimitAmount(
+        editTransition.timeLimitAmount != null && editTransition.timeLimitAmount > 0
+          ? String(editTransition.timeLimitAmount)
+          : "",
+      );
+      setTimeLimitUnit(
+        editTransition.timeLimitUnit === "HOURS" || editTransition.timeLimitUnit === "DAYS"
+          ? editTransition.timeLimitUnit
+          : "DAYS",
+      );
       setFromSource("step");
       setChainTransitionId("");
       setToMode(soleFinal && editTransition.toStepId === soleFinal.id ? "terminal" : "step");
@@ -116,6 +147,9 @@ export default function WorkflowTransitionModal({
       setToStepId("");
       setRequiresComment(false);
       setSelectedRoleIds([]);
+      setTimeLimitType("NONE");
+      setTimeLimitAmount("");
+      setTimeLimitUnit("DAYS");
       setFromSource("step");
       setChainTransitionId("");
       setToMode("step");
@@ -188,6 +222,14 @@ export default function WorkflowTransitionModal({
       return;
     }
 
+    if (timeLimitType !== "NONE") {
+      const amt = parseInt(timeLimitAmount.trim(), 10);
+      if (!Number.isFinite(amt) || amt < 1) {
+        setErrorMessage("Enter a positive number for the time limit.");
+        return;
+      }
+    }
+
     setErrorMessage(null);
     setSubmitting(true);
     try {
@@ -199,6 +241,9 @@ export default function WorkflowTransitionModal({
           toStepId: resolvedToId,
           requiresComment,
           allowedRoleIds: selectedRoleIds,
+          timeLimitType,
+          timeLimitAmount: timeLimitType === "NONE" ? null : parseInt(timeLimitAmount.trim(), 10),
+          timeLimitUnit: timeLimitType === "NONE" ? null : timeLimitUnit,
         };
         if (d) body.description = d;
         else body.description = null;
@@ -212,6 +257,9 @@ export default function WorkflowTransitionModal({
           requiresComment,
           allowedRoleIds: selectedRoleIds,
           toStepId: resolvedToId,
+          timeLimitType,
+          timeLimitAmount: timeLimitType === "NONE" ? null : parseInt(timeLimitAmount.trim(), 10),
+          timeLimitUnit: timeLimitType === "NONE" ? null : timeLimitUnit,
         };
         if (d) body.description = d;
         if (fromSource === "chain") {
@@ -414,7 +462,10 @@ export default function WorkflowTransitionModal({
           </div>
           <div>
             <span className="block text-xs font-semibold text-slate-600 mb-1">Roles allowed to execute</span>
-            <p className="text-[11px] text-slate-500 mb-2">Empty = any role may execute this transition.</p>
+            <p className="text-[11px] text-slate-500 mb-2">
+              Empty = any role may execute this transition. System admin and per-tenant intake roles are hidden; use Case manager
+              for handlers.
+            </p>
             <RolePicker roles={roles} selectedIds={selectedRoleIds} onToggle={toggleRole} />
           </div>
           <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
@@ -426,6 +477,62 @@ export default function WorkflowTransitionModal({
             />
             Require comment when taking this transition
           </label>
+          <div className="rounded-lg border border-slate-100 bg-slate-50/80 p-3 space-y-2">
+            <label className="block text-xs font-semibold text-slate-600" htmlFor="tr-time-type">
+              Time on current step (optional)
+            </label>
+            <select
+              id="tr-time-type"
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+              value={timeLimitType}
+              onChange={(e) =>
+                setTimeLimitType(e.target.value as "NONE" | "RECOMMENDATION" | "DEADLINE")
+              }
+            >
+              <option value="NONE">No time limit</option>
+              <option value="RECOMMENDATION">Recommendation — show target time only</option>
+              <option value="DEADLINE">Deadline — block this action after time expires</option>
+            </select>
+            {timeLimitType !== "NONE" && (
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1" htmlFor="tr-time-amt">
+                      Amount
+                    </label>
+                    <input
+                      id="tr-time-amt"
+                      type="number"
+                      min={1}
+                      step={1}
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                      value={timeLimitAmount}
+                      onChange={(e) => setTimeLimitAmount(e.target.value)}
+                      placeholder="e.g. 3"
+                    />
+                  </div>
+                  <div className="w-36">
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-1" htmlFor="tr-time-unit">
+                      Unit
+                    </label>
+                    <select
+                      id="tr-time-unit"
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+                      value={timeLimitUnit}
+                      onChange={(e) => setTimeLimitUnit(e.target.value as "HOURS" | "DAYS")}
+                    >
+                      <option value="HOURS">Hours</option>
+                      <option value="DAYS">Days</option>
+                    </select>
+                  </div>
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  Clock starts when the case enters this step (or at case creation if there is no prior history). Minutes are
+                  not supported — use hours or days only.
+                </p>
+              </div>
+            )}
+          </div>
           <div className="flex gap-2 pt-2 border-t border-slate-100">
             <button
               type="button"

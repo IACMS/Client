@@ -1,4 +1,7 @@
 import { NavLink } from "react-router-dom";
+import { useIsAdmin } from "@/context/SessionContext";
+import { usePermissions } from "@/permissions/usePermissions";
+import type { Permission } from "@/permissions/roles";
 
 type SidebarLinkItem = {
   placeholder?: false;
@@ -6,6 +9,16 @@ type SidebarLinkItem = {
   label: string;
   icon: string;
   end?: boolean;
+  /** If true, also visible when `isPlatformOperator` (session has exact `platform:manage_tenants`). */
+  orPlatformOperator?: boolean;
+  /** Same check as `<RequireAdmin />` — exact session perms only (not `*` / `users:*` wildcards). */
+  adminOnly?: boolean;
+  /** Hide the link unless the user holds this permission (unless anyOf/allOf are set). Ignored when adminOnly is true. */
+  permission?: Permission;
+  /** OR — show when any of these match `permissionAllowed` semantics. */
+  anyOf?: Permission[];
+  /** AND — show only when all match. */
+  allOf?: Permission[];
 };
 
 type SidebarPlaceholderItem = {
@@ -16,15 +29,52 @@ type SidebarPlaceholderItem = {
 
 type SidebarItem = SidebarLinkItem | SidebarPlaceholderItem;
 
+function linkVisible(
+  item: SidebarLinkItem,
+  check: {
+    isAdmin: boolean;
+    isPlatformOperator: boolean;
+    can: (p: Permission) => boolean;
+    anyOf: (...ps: Permission[]) => boolean;
+    allOf: (...ps: Permission[]) => boolean;
+  },
+): boolean {
+  if (item.adminOnly) return check.isAdmin;
+  if (item.orPlatformOperator && check.isPlatformOperator) return true;
+  if (item.allOf?.length) return check.allOf(...item.allOf);
+  if (item.anyOf?.length) return check.anyOf(...item.anyOf);
+  if (item.permission) return check.can(item.permission);
+  return true;
+}
+
 const items: SidebarItem[] = [
+  // Intentionally ungated: home for every signed-in user; dashboard API slices may return empty per RBAC.
   { to: "/dashboard", label: "Dashboard", icon: "dashboard", end: true },
-  { to: "/cases", label: "Cases", icon: "work", end: false },
-  { to: "/workflows", label: "Workflows", icon: "account_tree", end: false },
-  { to: "/users", label: "Users", icon: "group", end: false },
-  { to: "/agencies", label: "Agencies", icon: "account_balance", end: false },
+  // Cases list + detail use case APIs gated as cases:read.
+  { to: "/cases", label: "Cases", icon: "work", end: false, permission: "cases:read" },
+  // Workflow list matches gateway GET /workflows; designer allows workflows:read (view) or update (edit).
+  { to: "/workflows", label: "Workflows", icon: "account_tree", end: false, permission: "workflows:read" },
+  // Matches <RequireAdmin /> — must use useIsAdmin, not can(), so wildcards don’t widen access vs the route.
+  { to: "/users", label: "Users", icon: "group", end: false, adminOnly: true },
+  // Tenant staff: cases + tenant APIs. Platform operators: directory only (no case/workflow APIs).
+  { to: "/agencies", label: "Agencies", icon: "account_balance", end: false, allOf: ["cases:read", "tenants:read"], orPlatformOperator: true },
+  {
+    to: "/api-health",
+    label: "API",
+    icon: "lan",
+    end: false,
+    permission: "platform:manage_tenants",
+  },
   { placeholder: true, label: "Tasks", icon: "assignment" },
   { placeholder: true, label: "Reports", icon: "assessment" },
-  { to: "/settings/tenant", label: "Settings", icon: "settings", end: false },
+  // Same guard as /users (<RequireAdmin />).
+  {
+    to: "/settings/tenant",
+    label: "Settings",
+    icon: "settings",
+    end: false,
+    adminOnly: true,
+  },
   { placeholder: true, label: "Audit", icon: "history" },
 ];
 
@@ -35,7 +85,7 @@ function linkClassName(isActive: boolean, placeholder?: boolean): string {
     return `${base} text-slate-700 dark:text-slate-300 opacity-70 cursor-not-allowed pointer-events-none`;
   }
   if (isActive) {
-    return `${base} bg-teal-700 text-white font-semibold`;
+    return `${base} bg-primary text-white font-semibold`;
   }
   return `${base} text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800`;
 }
@@ -44,6 +94,11 @@ type Variant = "dashboard" | "cases";
 
 export default function PortalSidebar({ variant }: { variant: Variant }) {
   const isDash = variant === "dashboard";
+  const { isAdmin, isSystemAdmin: isPlatformOperator } = useIsAdmin();
+  const { can, anyOf, allOf } = usePermissions();
+  const visibleItems = items.filter((item) =>
+    item.placeholder === true ? true : linkVisible(item, { isAdmin, isPlatformOperator, can, anyOf, allOf }),
+  );
   const asideClass =
     "fixed left-0 top-16 h-[calc(100vh-4rem)] flex flex-col p-4 gap-2 z-30 bg-slate-50 dark:bg-slate-950 border-r border-slate-200 dark:border-slate-800 w-64 transition-all duration-200 ease-in-out hidden md:flex overflow-y-auto";
 
@@ -56,7 +111,7 @@ export default function PortalSidebar({ variant }: { variant: Variant }) {
               <span className="material-symbols-outlined text-white">account_balance</span>
             </div>
             <div>
-              <h2 className="font-inter text-sm font-bold text-teal-700 dark:text-teal-400 leading-tight">
+              <h2 className="font-inter text-sm font-bold text-primary leading-tight">
                 Case Management
               </h2>
               <p className="font-inter text-[10px] text-slate-500 uppercase tracking-wider">Institutional Portal</p>
@@ -75,7 +130,7 @@ export default function PortalSidebar({ variant }: { variant: Variant }) {
         )}
       </div>
       <nav className="flex flex-col gap-1 flex-1">
-        {items.map((item) =>
+        {visibleItems.map((item) =>
           item.placeholder === true ? (
             <span key={item.label} title="Coming soon" className={linkClassName(false, true)}>
               <span className="material-symbols-outlined">{item.icon}</span>
@@ -89,19 +144,6 @@ export default function PortalSidebar({ variant }: { variant: Variant }) {
           ),
         )}
       </nav>
-      {isDash && (
-        <div className="mt-auto p-2">
-          <div className="bg-surface-container-low p-3 rounded-lg border border-outline-variant">
-            <p className="text-[10px] font-label-caps text-on-surface-variant mb-1">CURRENT TENANT</p>
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-semibold text-primary truncate">Dept. of Social Services</span>
-              <span className="material-symbols-outlined text-xs cursor-pointer shrink-0" aria-hidden>
-                swap_horiz
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
     </aside>
   );
 }

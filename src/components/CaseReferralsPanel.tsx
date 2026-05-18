@@ -76,10 +76,13 @@ export default function CaseReferralsPanel({
   caseId,
   fromTenantId,
   userId,
+  canCreate = true,
 }: {
   caseId: string;
   fromTenantId: string;
   userId: string;
+  /** When false, hide the "create referral" form and only render the read-only list. */
+  canCreate?: boolean;
 }) {
   const [partnerCode, setPartnerCode] = useState("");
   const [reason, setReason] = useState("");
@@ -133,12 +136,16 @@ export default function CaseReferralsPanel({
   return (
     <div className="p-lg space-y-lg max-w-3xl">
       <div>
-        <h3 className="font-h3 text-primary mb-2">Refer this case to a partner tenant</h3>
+        <h3 className="font-h3 text-primary mb-2">
+          {canCreate ? "Refer this case to a partner tenant" : "Referrals for this case"}
+        </h3>
         <p className="text-sm text-slate-600">
-          Enter the partner organization&apos;s tenant code. They receive a record via the referral service (and email when
-          notifications are configured).
+          {canCreate
+            ? "Enter the partner organization's tenant code. They receive a record via the referral service (and email when notifications are configured)."
+            : "Your role can view referrals on this case but not create new ones."}
         </p>
       </div>
+      {canCreate && (
       <form onSubmit={handleSubmit} className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
         {msg && (
           <p
@@ -178,6 +185,7 @@ export default function CaseReferralsPanel({
           {submitting ? "Submitting…" : "Create referral"}
         </button>
       </form>
+      )}
       <div>
         <h4 className="font-label-caps text-slate-500 mb-2">Existing referrals</h4>
         <ReferralsList caseId={caseId} version={listVersion} />

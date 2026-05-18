@@ -1,5 +1,7 @@
 /** API client for IACMS gateway (`VITE_API_URL`, default http://localhost:3000). */
 
+import { authBus } from "./authEvents";
+
 const ACCESS_KEY = "iacms.accessToken";
 const REFRESH_KEY = "iacms.refreshToken";
 
@@ -121,36 +123,53 @@ async function refreshAccessToken(): Promise<boolean> {
   }
 }
 
-/** Gateway fetch with session cookies + optional Bearer JWT for `/auth/*` upstream routes. */
+/** Public endpoints whose 401s must not trigger a refresh + redirect. */
+function isPublicAuthPath(path: string): boolean {
+  return (
+    path.includes("/auth/login") ||
+    path.includes("/auth/register") ||
+    path.includes("/session/login") ||
+    path.includes("/session/logout") ||
+    path.includes("/auth/refresh") ||
+    path.includes("/auth/forgot-password") ||
+    path.includes("/auth/reset-password") ||
+    path.includes("/auth/verify-email") ||
+    path.includes("/tenants/register") ||
+    path.includes("/tenants/validate/") ||
+    path.includes("/session/status")
+  );
+}
+
+/** Gateway fetch with session cookies + optional Bearer JWT. Handles refresh-on-401 globally. */
 export async function apiFetch(path: string, init: RequestInit = {}): Promise<unknown> {
   const base = getApiBase();
   const url = `${base}${path.startsWith("/") ? path : `/${path}`}`;
-  const headers = new Headers(init.headers);
-  if (!headers.has("Content-Type") && init.body != null && !(init.body instanceof FormData)) {
-    headers.set("Content-Type", "application/json");
-  }
-  const bearer = getStoredAccessToken();
-  if (bearer && !headers.has("Authorization")) {
-    headers.set("Authorization", `Bearer ${bearer}`);
-  }
-
-  let res = await fetch(url, {
-    credentials: "include",
-    ...init,
-    headers,
-  });
-
-  if (res.status === 401 && bearer && path.includes("/auth/") && !path.includes("/auth/login") && !path.includes("/auth/register")) {
-    const ok = await refreshAccessToken();
-    if (ok) {
-      const headers2 = new Headers(init.headers);
-      if (!headers2.has("Content-Type") && init.body != null && !(init.body instanceof FormData)) {
-        headers2.set("Content-Type", "application/json");
-      }
-      const b2 = getStoredAccessToken();
-      if (b2) headers2.set("Authorization", `Bearer ${b2}`);
-      res = await fetch(url, { credentials: "include", ...init, headers: headers2 });
+  const buildHeaders = (): Headers => {
+    const h = new Headers(init.headers);
+    if (!h.has("Content-Type") && init.body != null && !(init.body instanceof FormData)) {
+      h.set("Content-Type", "application/json");
     }
+    const token = getStoredAccessToken();
+    if (token && !h.has("Authorization")) {
+      h.set("Authorization", `Bearer ${token}`);
+    }
+    return h;
+  };
+
+  let res = await fetch(url, { credentials: "include", ...init, headers: buildHeaders() });
+
+  if (res.status === 401 && !isPublicAuthPath(path)) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) {
+      res = await fetch(url, { credentials: "include", ...init, headers: buildHeaders() });
+    } else if (getStoredAccessToken() || getRefreshToken()) {
+      // Had a token, refresh failed → session is gone.
+      authBus.emit("expired");
+    }
+  }
+
+  if (res.status === 403) {
+    authBus.emit("forbidden");
   }
 
   const data = await parseResponse(res);
@@ -160,22 +179,37 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<un
   return data;
 }
 
-export async function apiGet(path: string): Promise<unknown> {
-  return apiFetch(path, { method: "GET" });
+/**
+ * Optional second argument for the JSON helpers. `signal` lets callers tie a
+ * request to an `AbortController` so unmount/teardown cancels the in-flight
+ * request instead of completing it pointlessly.
+ */
+export type ApiCallOptions = { signal?: AbortSignal };
+
+export async function apiGet(path: string, opts: ApiCallOptions = {}): Promise<unknown> {
+  return apiFetch(path, { method: "GET", signal: opts.signal });
 }
 
-export async function apiPost(path: string, json: unknown): Promise<unknown> {
-  return apiFetch(path, { method: "POST", body: JSON.stringify(json) });
+export async function apiPost(path: string, json: unknown, opts: ApiCallOptions = {}): Promise<unknown> {
+  return apiFetch(path, { method: "POST", body: JSON.stringify(json), signal: opts.signal });
 }
 
-export async function apiPatch(path: string, json: unknown): Promise<unknown> {
-  return apiFetch(path, { method: "PATCH", body: JSON.stringify(json) });
+export async function apiPatch(path: string, json: unknown, opts: ApiCallOptions = {}): Promise<unknown> {
+  return apiFetch(path, { method: "PATCH", body: JSON.stringify(json), signal: opts.signal });
 }
 
-export async function apiPut(path: string, json: unknown): Promise<unknown> {
-  return apiFetch(path, { method: "PUT", body: JSON.stringify(json) });
+export async function apiPut(path: string, json: unknown, opts: ApiCallOptions = {}): Promise<unknown> {
+  return apiFetch(path, { method: "PUT", body: JSON.stringify(json), signal: opts.signal });
 }
 
-export async function apiDelete(path: string): Promise<unknown> {
-  return apiFetch(path, { method: "DELETE" });
+export async function apiDelete(path: string, opts: ApiCallOptions = {}): Promise<unknown> {
+  return apiFetch(path, { method: "DELETE", signal: opts.signal });
+}
+
+/** True when an error came from a cancelled fetch (caller can ignore). */
+export function isAbortError(e: unknown): boolean {
+  return (
+    e instanceof DOMException && e.name === "AbortError" ||
+    (e instanceof Error && e.name === "AbortError")
+  );
 }

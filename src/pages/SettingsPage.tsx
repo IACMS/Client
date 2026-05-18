@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useSession } from "@/context/SessionContext";
 import { ApiError, apiGet, apiPatch, apiPost } from "@/lib/api";
 import { PASSWORD_HINT, isPasswordValid } from "@/lib/passwordRules";
@@ -16,8 +16,12 @@ type ProfileUser = {
 };
 
 export default function SettingsPage() {
-  const { refresh: refreshSession } = useSession();
-  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { user: sessionUser, refresh: refreshSession } = useSession();
+  const mustChangeFirst = sessionUser?.mustChangePassword === true;
+
+  const [loading, setLoading] = useState(!mustChangeFirst);
   const [profileError, setProfileError] = useState<string | null>(null);
   const [profile, setProfile] = useState<ProfileUser | null>(null);
 
@@ -34,6 +38,13 @@ export default function SettingsPage() {
   const [pwdMessage, setPwdMessage] = useState<string | null>(null);
 
   useEffect(() => {
+    if (mustChangeFirst) {
+      setLoading(false);
+      setProfile(null);
+      setProfileError(null);
+      return;
+    }
+
     let cancelled = false;
     (async () => {
       setLoading(true);
@@ -57,7 +68,7 @@ export default function SettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [mustChangeFirst]);
 
   async function saveProfile(e: FormEvent) {
     e.preventDefault();
@@ -97,6 +108,11 @@ export default function SettingsPage() {
     }
     setPwdSaving(true);
     try {
+      const wasForced = mustChangeFirst;
+      const from =
+        (location.state as { from?: string } | null)?.from && typeof (location.state as { from?: string }).from === "string"
+          ? (location.state as { from: string }).from
+          : null;
       await apiPost("/api/v1/auth/change-password", {
         currentPassword,
         newPassword,
@@ -106,11 +122,103 @@ export default function SettingsPage() {
       setConfirmPassword("");
       setPwdMessage("Password changed.");
       await refreshSession();
+      if (wasForced) {
+        const dest = from && from !== "/settings" && !from.startsWith("/settings/") ? from : "/dashboard";
+        navigate(dest, { replace: true });
+      }
     } catch (err) {
       setPwdMessage(err instanceof ApiError ? err.message : "Could not change password.");
     } finally {
       setPwdSaving(false);
     }
+  }
+
+  function passwordFormSection(options: { heading: string; intro?: string }) {
+    return (
+      <section className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+        <h2 className="font-h3 text-teal-900 mb-2">{options.heading}</h2>
+        {options.intro ? <p className="text-sm text-slate-600 mb-4">{options.intro}</p> : null}
+        <form className="space-y-4 max-w-md" onSubmit={changePassword}>
+          <div>
+            <label className="block text-xs font-label-caps text-slate-500 mb-1 uppercase" htmlFor="cur">
+              Current password
+            </label>
+            <input
+              id="cur"
+              type="password"
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              autoComplete="current-password"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-label-caps text-slate-500 mb-1 uppercase" htmlFor="np">
+              New password
+            </label>
+            <input
+              id="np"
+              type="password"
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              autoComplete="new-password"
+              required
+            />
+            <p className="text-[11px] text-slate-500 mt-1">{PASSWORD_HINT}</p>
+          </div>
+          <div>
+            <label className="block text-xs font-label-caps text-slate-500 mb-1 uppercase" htmlFor="cp">
+              Confirm new password
+            </label>
+            <input
+              id="cp"
+              type="password"
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              autoComplete="new-password"
+              required
+            />
+          </div>
+          {pwdMessage && (
+            <p className={`text-sm ${pwdMessage.includes("changed.") ? "text-teal-800" : "text-red-700"}`}>{pwdMessage}</p>
+          )}
+          <button
+            type="submit"
+            disabled={pwdSaving || !isPasswordValid(newPassword) || newPassword !== confirmPassword}
+            className="bg-slate-800 text-white text-sm font-semibold px-4 py-2 rounded-lg disabled:opacity-50"
+          >
+            {pwdSaving ? "Updating…" : "Update password"}
+          </button>
+        </form>
+      </section>
+    );
+  }
+
+  if (mustChangeFirst) {
+    return (
+      <div className="p-gutter max-w-2xl space-y-6 pb-12">
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-amber-950">
+          <h1 className="font-h2 text-primary mb-2">Set a new password</h1>
+          <p className="text-sm text-amber-900">
+            Your account was created with a temporary password. Choose a new password before using the rest of the
+            portal.
+          </p>
+          <p className="text-sm text-slate-700 mt-2 font-mono">
+            {sessionUser?.email}
+            {sessionUser?.tenant?.code ? (
+              <span className="font-sans text-slate-600">
+                {" "}
+                · Tenant <span className="font-mono">{sessionUser.tenant.code}</span>
+              </span>
+            ) : null}
+          </p>
+        </div>
+        {passwordFormSection({ heading: "Change password" })}
+      </div>
+    );
   }
 
   if (loading) {
@@ -188,7 +296,9 @@ export default function SettingsPage() {
             />
           </div>
           {profileSaved && (
-            <p className={`text-sm ${profileSaved.includes("No changes") || profileSaved.includes("updated.") ? "text-teal-800" : "text-red-700"}`}>
+            <p
+              className={`text-sm ${profileSaved.includes("No changes") || profileSaved.includes("updated.") ? "text-teal-800" : "text-red-700"}`}
+            >
               {profileSaved}
             </p>
           )}
@@ -202,70 +312,7 @@ export default function SettingsPage() {
         </form>
       </section>
 
-      <section className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
-        <h2 className="font-h3 text-teal-900 mb-4">Change password</h2>
-        <form className="space-y-4 max-w-md" onSubmit={changePassword}>
-          <div>
-            <label className="block text-xs font-label-caps text-slate-500 mb-1 uppercase" htmlFor="cur">
-              Current password
-            </label>
-            <input
-              id="cur"
-              type="password"
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              autoComplete="current-password"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-label-caps text-slate-500 mb-1 uppercase" htmlFor="np">
-              New password
-            </label>
-            <input
-              id="np"
-              type="password"
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              autoComplete="new-password"
-              required
-            />
-            <p className="text-[11px] text-slate-500 mt-1">{PASSWORD_HINT}</p>
-          </div>
-          <div>
-            <label className="block text-xs font-label-caps text-slate-500 mb-1 uppercase" htmlFor="cp">
-              Confirm new password
-            </label>
-            <input
-              id="cp"
-              type="password"
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              autoComplete="new-password"
-              required
-            />
-          </div>
-          {pwdMessage && (
-            <p className={`text-sm ${pwdMessage.includes("changed.") ? "text-teal-800" : "text-red-700"}`}>{pwdMessage}</p>
-          )}
-          <button
-            type="submit"
-            disabled={pwdSaving || !isPasswordValid(newPassword) || newPassword !== confirmPassword}
-            className="bg-slate-800 text-white text-sm font-semibold px-4 py-2 rounded-lg disabled:opacity-50"
-          >
-            {pwdSaving ? "Updating…" : "Update password"}
-          </button>
-        </form>
-      </section>
-
-      <p className="text-sm">
-        <Link to="/settings/api-check" className="text-primary font-semibold hover:underline">
-          API connectivity check
-        </Link>
-      </p>
+      {passwordFormSection({ heading: "Change password" })}
     </div>
   );
 }

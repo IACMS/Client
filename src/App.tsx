@@ -1,5 +1,8 @@
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import RequireAuth from "./components/RequireAuth";
+import RequireAdmin from "./components/RequireAdmin";
+import RequireRole from "./components/RequireRole";
+import ForbiddenBanner from "./components/ForbiddenBanner";
 import CasesLayout from "./layouts/CasesLayout";
 import DashboardLayout from "./layouts/DashboardLayout";
 import HomePage from "./pages/HomePage";
@@ -30,22 +33,22 @@ export default function App() {
 
   useEffect(() => {
     // Dynamic tenant branding injection
-    const config = (user?.tenant as any)?.config;
+    const config = user?.tenant?.config;
     if (config?.primaryColor) {
-      document.documentElement.style.setProperty('--color-primary', config.primaryColor);
-      // Fallback/override for our Tailwind primary hex
-      document.documentElement.style.setProperty('--color-primary-hex', config.primaryColor);
+      document.documentElement.style.setProperty("--iacms-primary", config.primaryColor);
     }
     if (config?.secondaryColor) {
-      document.documentElement.style.setProperty('--color-secondary', config.secondaryColor);
+      document.documentElement.style.setProperty("--iacms-secondary", config.secondaryColor);
     }
     if (config?.fontPreference) {
-      document.documentElement.style.setProperty('--font-family-body', config.fontPreference);
+      document.documentElement.style.setProperty("--font-family-body", config.fontPreference);
     }
   }, [user?.tenant]);
 
   return (
-    <Routes>
+    <>
+      <ForbiddenBanner />
+      <Routes>
       <Route path="/" element={<HomePage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
@@ -57,12 +60,22 @@ export default function App() {
       <Route element={<RequireAuth />}>
         <Route element={<DashboardLayout />}>
           <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/workflows" element={<WorkflowsPage />} />
-          <Route path="/workflows/:id/designer" element={<WorkflowDesignerPage />} />
           <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/settings/api-check" element={<ApiDiagnosticsPage />} />
-          <Route path="/settings/tenant" element={<TenantSettingsPage />} />
-          <Route path="/users" element={<UsersPage />} />
+          <Route element={<RequireRole permission="platform:manage_tenants" />}>
+            <Route path="/api-health" element={<ApiDiagnosticsPage />} />
+          </Route>
+
+          {/* Workflow list + graph: read shows the designer as view-only; mutations stay workflows:update. */}
+          <Route path="/workflows" element={<WorkflowsPage />} />
+          <Route element={<RequireRole anyOf={["workflows:read", "workflows:update"]} />}>
+            <Route path="/workflows/:id/designer" element={<WorkflowDesignerPage />} />
+          </Route>
+
+          {/* Admin-only routes: hidden from non-admins in the UI and blocked here. */}
+          <Route element={<RequireAdmin />}>
+            <Route path="/settings/tenant" element={<TenantSettingsPage />} />
+            <Route path="/users" element={<UsersPage />} />
+          </Route>
         </Route>
 
         <Route element={<CasesLayout />}>
@@ -74,9 +87,12 @@ export default function App() {
           <Route path="/agencies" element={<AgenciesPage />} />
           <Route path="/agencies/:agencySlug" element={<AgencyDetailPage />} />
         </Route>
+
+        <Route path="/settings/api-check" element={<Navigate to="/api-health" replace />} />
       </Route>
 
       <Route path="*" element={<NotFoundPage />} />
-    </Routes>
+      </Routes>
+    </>
   );
 }

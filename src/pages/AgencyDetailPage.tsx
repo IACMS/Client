@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { useSession } from "@/context/SessionContext";
-import { ApiError, apiGet } from "@/lib/api";
+import { useIsAdmin, useSession } from "@/context/SessionContext";
+import { ApiError, apiGet, isAbortError } from "@/lib/api";
 import type { ApiCase } from "@/lib/casesApi";
 
 type CasesResponse = { cases?: ApiCase[] };
@@ -25,8 +25,9 @@ export default function AgencyDetailPage() {
   }, [agencySlug]);
 
   const { user } = useSession();
+  const { isSystemAdmin } = useIsAdmin();
   const sessionCode = user?.tenant?.code?.toLowerCase() ?? "";
-  const tenantId = user?.tenant?.id;
+  const tenantId = user?.tenant?.id ?? user?.tenantId;
 
   const [tenant, setTenant] = useState<TenantApi | null>(null);
   const [caseCount, setCaseCount] = useState<number | null>(null);
@@ -35,35 +36,73 @@ export default function AgencyDetailPage() {
   const slugMatchesSession = Boolean(slug && sessionCode && slug === sessionCode);
 
   useEffect(() => {
-    let cancelled = false;
+    const ac = new AbortController();
+
+    if (!slug) {
+      setTenant(null);
+      setCaseCount(null);
+      setError(null);
+      return () => ac.abort();
+    }
+
+    if (isSystemAdmin) {
+      (async () => {
+        setError(null);
+        setTenant(null);
+        setCaseCount(null);
+        try {
+          const d = (await apiGet("/api/v1/tenants", { signal: ac.signal })) as { tenants?: TenantApi[] };
+          if (ac.signal.aborted) return;
+          const rows = Array.isArray(d.tenants) ? d.tenants : [];
+          const match = rows.find((t) => t.code.toLowerCase() === slug);
+          if (!match) {
+            setError("No agency with this code exists in the platform directory.");
+            return;
+          }
+          const full = (await apiGet(`/api/v1/tenants/${encodeURIComponent(match.id)}`, {
+            signal: ac.signal,
+          })) as TenantResponse;
+          if (ac.signal.aborted) return;
+          setTenant(full.tenant ?? match);
+        } catch (e) {
+          if (isAbortError(e) || ac.signal.aborted) return;
+          setError(e instanceof ApiError ? e.message : "Failed to load agency profile.");
+          setTenant(null);
+        }
+      })();
+      return () => ac.abort();
+    }
+
     if (!slugMatchesSession || !tenantId) {
       setTenant(null);
       setCaseCount(null);
       setError(slug && !slugMatchesSession ? "This profile URL does not match your signed-in tenant." : null);
-      return;
+      return () => ac.abort();
     }
     (async () => {
       setError(null);
       try {
         const [tRes, cRes] = await Promise.all([
-          apiGet(`/api/v1/tenants/${encodeURIComponent(tenantId)}`) as Promise<TenantResponse>,
-          apiGet(`/api/v1/cases?tenantId=${encodeURIComponent(tenantId)}`) as Promise<CasesResponse>,
+          apiGet(`/api/v1/tenants/${encodeURIComponent(tenantId)}`, {
+            signal: ac.signal,
+          }) as Promise<TenantResponse>,
+          apiGet(`/api/v1/cases?tenantId=${encodeURIComponent(tenantId)}`, {
+            signal: ac.signal,
+          }) as Promise<CasesResponse>,
         ]);
-        if (cancelled) return;
+        if (ac.signal.aborted) return;
         setTenant(tRes.tenant ?? null);
         const list = Array.isArray(cRes.cases) ? cRes.cases : [];
         setCaseCount(list.length);
       } catch (e) {
-        if (cancelled) return;
+        if (isAbortError(e) || ac.signal.aborted) return;
         setError(e instanceof ApiError ? e.message : "Failed to load agency profile.");
         setTenant(null);
         setCaseCount(null);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
-  }, [slugMatchesSession, tenantId]);
+    return () => ac.abort();
+  }, [isSystemAdmin, slug, slugMatchesSession, tenantId]);
 
   if (!slug) {
     return (
@@ -78,7 +117,7 @@ export default function AgencyDetailPage() {
     );
   }
 
-  if (!slugMatchesSession) {
+  if (!isSystemAdmin && !slugMatchesSession) {
     return (
       <div className="p-gutter max-w-3xl mx-auto w-full pb-10">
         <div className="bg-white border border-outline-variant rounded-xl p-xl text-center">
@@ -89,7 +128,10 @@ export default function AgencyDetailPage() {
             <span className="font-mono text-sm">{sessionCode || "none"}</span>
             ). URL requested: <span className="font-mono text-sm">{slug}</span>.
           </p>
-          <Link to="/agencies" className="inline-flex items-center gap-2 bg-primary text-white px-6 py-2.5 rounded-lg font-semibold hover:bg-primary-container transition-colors">
+          <Link
+            to="/agencies"
+            className="inline-flex items-center gap-2 bg-primary text-white px-6 py-2.5 rounded-lg font-semibold hover:bg-primary-container transition-colors"
+          >
             <span className="material-symbols-outlined text-sm">arrow_back</span>
             Back to directory
           </Link>
@@ -141,12 +183,22 @@ export default function AgencyDetailPage() {
           <div className="flex flex-col items-end gap-2">
             <span
               className={`px-3 py-1 rounded-full text-label-caps font-bold border ${
-                tenant.isActive === false ? "bg-amber-50 text-amber-800 border-amber-200" : "bg-green-50 text-green-800 border-green-200"
+                tenant.isActive === false
+                  ? "bg-amber-50 text-amber-800 border-amber-200"
+                  : "bg-green-50 text-green-800 border-green-200"
               }`}
             >
               {tenant.isActive === false ? "INACTIVE" : "ACTIVE"}
             </span>
-            <span className="text-xs font-system-id text-slate-400">{caseCount === null ? "—" : `${caseCount} case(s)`}</span>
+            {isSystemAdmin ? (
+              <span className="text-xs font-system-id text-slate-400 max-w-xs text-right">
+                Platform registry view — case and workflow metrics are not shown for this role.
+              </span>
+            ) : (
+              <span className="text-xs font-system-id text-slate-400">
+                {caseCount === null ? "—" : `${caseCount} case(s)`}
+              </span>
+            )}
           </div>
         </div>
       </div>

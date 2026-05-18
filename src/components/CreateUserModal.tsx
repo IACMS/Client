@@ -30,13 +30,13 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess }: CreateUs
     if (!isOpen) return;
     let cancelled = false;
     void (async () => {
-      const list = await fetchRbacRoles();
+      const list = tenantId ? await fetchRbacRoles({ tenantId }) : await fetchRbacRoles();
       if (!cancelled) setRoles(list);
     })();
     return () => {
       cancelled = true;
     };
-  }, [isOpen]);
+  }, [isOpen, tenantId]);
 
   useEffect(() => {
     if (!isOpen) return;

@@ -2,7 +2,9 @@ import { Link } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 import { useSession } from "@/context/SessionContext";
 import CreateCaseModal from "@/components/CreateCaseModal";
-import { ApiError, apiGet } from "@/lib/api";
+import Can from "@/permissions/Can";
+import ForbiddenView from "@/components/ForbiddenView";
+import { ApiError, apiGet, isAbortError } from "@/lib/api";
 import {
   type ApiCase,
   formatCaseUpdated,
@@ -47,16 +49,36 @@ function Stat({
 
 export default function CasesPage() {
   const { user } = useSession();
-  const tenantId = user?.tenant?.id;
+  const tenantId = user?.tenant?.id ?? user?.tenantId;
   const [cases, setCases] = useState<ApiCase[]>([]);
-  const [loadState, setLoadState] = useState<"loading" | "ok" | "error">("loading");
+  const [loadState, setLoadState] = useState<"loading" | "ok" | "error" | "forbidden">("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [listVersion, setListVersion] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
+    const ac = new AbortController();
     (async () => {
+      // #region agent log
+      fetch("http://127.0.0.1:7377/ingest/6302afe2-f95e-483b-b849-884818589670", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "99907a" },
+        body: JSON.stringify({
+          sessionId: "99907a",
+          runId: "post-session-normalize",
+          hypothesisId: "H1",
+          location: "CasesPage.tsx:fetch:start",
+          message: "cases load tenant ids from session",
+          data: {
+            tenantFromNestedObject: Boolean(user?.tenant?.id),
+            tenantFromFlat: Boolean(user?.tenantId),
+            effectiveTenantIdPassedToEffect: tenantId ?? null,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
       if (!tenantId) {
         setLoadState("error");
         setErrorMessage("No tenant on session. Sign in again with a valid tenant code.");
@@ -66,19 +88,59 @@ export default function CasesPage() {
       setErrorMessage(null);
       try {
         const q = new URLSearchParams({ tenantId });
-        const data = (await apiGet(`/api/v1/cases?${q.toString()}`)) as CasesResponse;
+        const data = (await apiGet(`/api/v1/cases?${q.toString()}`, {
+          signal: ac.signal,
+        })) as CasesResponse;
         const list = Array.isArray(data.cases) ? data.cases : [];
         if (!cancelled) {
           setCases(list);
           setLoadState("ok");
         }
+        // #region agent log
+        fetch("http://127.0.0.1:7377/ingest/6302afe2-f95e-483b-b849-884818589670", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "99907a" },
+          body: JSON.stringify({
+            sessionId: "99907a",
+            runId: "post-session-normalize",
+            hypothesisId: "VERIFY",
+            location: "CasesPage.tsx:fetch:ok",
+            message: "cases list loaded",
+            data: { caseCount: list.length },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion
       } catch (e) {
-        if (cancelled) return;
+        if (cancelled || isAbortError(e)) return;
+        // #region agent log
+        fetch("http://127.0.0.1:7377/ingest/6302afe2-f95e-483b-b849-884818589670", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "99907a" },
+          body: JSON.stringify({
+            sessionId: "99907a",
+            runId: "post-session-normalize",
+            hypothesisId: e instanceof ApiError && e.status === 403 ? "H2" : "H3",
+            location: "CasesPage.tsx:fetch:error",
+            message: "cases API error",
+            data: {
+              isApiError: e instanceof ApiError,
+              status: e instanceof ApiError ? e.status : null,
+              name: e instanceof Error ? e.name : "unknown",
+            },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion
+        if (e instanceof ApiError && e.status === 403) {
+          setErrorMessage(e.message);
+          setCases([]);
+          setLoadState("forbidden");
+          return;
+        }
         const msg =
           e instanceof ApiError
-            ? e.status === 403
-              ? "You don’t have permission to read cases (RBAC). Use a seeded user with cases:read."
-              : e.message
+            ? e.message
             : "Could not load cases. Is the API gateway and case-service running?";
         setErrorMessage(msg);
         setCases([]);
@@ -87,6 +149,7 @@ export default function CasesPage() {
     })();
     return () => {
       cancelled = true;
+      ac.abort();
     };
   }, [tenantId, listVersion]);
 
@@ -100,6 +163,10 @@ export default function CasesPage() {
     const escalated = cases.filter((c) => c.status.toLowerCase().includes("escalat")).length;
     return { total, pending, active, escalated };
   }, [cases]);
+
+  if (loadState === "forbidden") {
+    return <ForbiddenView resource="the case list" detail={errorMessage ?? undefined} />;
+  }
 
   return (
     <div className="p-gutter max-w-7xl mx-auto w-full pb-10">
@@ -125,15 +192,17 @@ export default function CasesPage() {
             <h1 className="font-h1 text-primary">Inter-Agency Case Listing</h1>
             <p className="font-body-md text-slate-600 mt-1">Review and manage cross-departmental enforcement actions.</p>
           </div>
-          <button
-            type="button"
-            disabled={!tenantId || !user?.id}
-            onClick={() => setCreateOpen(true)}
-            className="bg-primary text-white px-6 py-2.5 rounded-lg font-semibold flex items-center gap-2 hover:bg-primary-container transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <span className="material-symbols-outlined">add</span>
-            Create Case
-          </button>
+          <Can permission="cases:create">
+            <button
+              type="button"
+              disabled={!tenantId || !user?.id}
+              onClick={() => setCreateOpen(true)}
+              className="bg-primary text-white px-6 py-2.5 rounded-lg font-semibold flex items-center gap-2 hover:bg-primary-container transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <span className="material-symbols-outlined">add</span>
+              Create Case
+            </button>
+          </Can>
         </div>
       </div>
 

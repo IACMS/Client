@@ -2,6 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --iacms-primary: #003e46;
+  --iacms-secondary: #565e74;
+}
+
 .material-symbols-outlined {
   font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
   display: inline-block;
@@ -11,6 +16,53 @@
   word-wrap: normal;
   white-space: nowrap;
   direction: ltr;
+}
+
+/* Tenant branding overrides for Tailwind utility classes used throughout the UI. */
+.text-primary {
+  color: var(--iacms-primary) !important;
+}
+.bg-primary {
+  background-color: var(--iacms-primary) !important;
+}
+.border-primary {
+  border-color: var(--iacms-primary) !important;
+}
+.ring-primary {
+  --tw-ring-color: var(--iacms-primary) !important;
+}
+.focus\:ring-primary:focus {
+  --tw-ring-color: var(--iacms-primary) !important;
+}
+
+/* Back-compat: many components still use Tailwind teal-* utilities.
+   Map them onto the tenant primary color so branding is consistent. */
+.text-teal-900,
+.text-teal-800,
+.text-teal-700,
+.text-teal-600,
+.text-teal-500,
+.text-teal-400 {
+  color: var(--iacms-primary) !important;
+}
+.bg-teal-900,
+.bg-teal-800,
+.bg-teal-700,
+.bg-teal-600,
+.bg-teal-500 {
+  background-color: var(--iacms-primary) !important;
+}
+.border-teal-700,
+.border-teal-600,
+.border-teal-500,
+.border-teal-400,
+.border-teal-300,
+.border-teal-200 {
+  border-color: var(--iacms-primary) !important;
+}
+.ring-teal-500,
+.ring-teal-200 {
+  --tw-ring-color: var(--iacms-primary) !important;
 }
 
 body {

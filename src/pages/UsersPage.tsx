@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { apiGet } from "@/lib/api";
 import CreateUserModal from "@/components/CreateUserModal";
+import { usePermissions } from "@/permissions/usePermissions";
 
 type ApiUser = {
   id: string;
@@ -19,6 +20,9 @@ export default function UsersPage() {
   const [users, setUsers] = useState<ApiUser[]>([]);
   const [loadState, setLoadState] = useState<"loading" | "ok" | "error">("loading");
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const { can } = usePermissions();
+  const canInvite = can("users:create");
+  const canEdit = can("users:update");
   
   const fetchUsers = async () => {
     setLoadState("loading");
@@ -47,13 +51,15 @@ export default function UsersPage() {
           <h1 className="font-h1 text-primary">User Management</h1>
           <p className="font-body-md text-slate-600 mt-1">Manage users, roles, and access within your organization.</p>
         </div>
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="bg-primary text-white px-6 py-2.5 rounded-lg font-semibold flex items-center gap-2 hover:bg-primary-container transition-all shadow-sm"
-        >
-          <span className="material-symbols-outlined">person_add</span>
-          Invite User
-        </button>
+        {canInvite && (
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="bg-primary text-white px-6 py-2.5 rounded-lg font-semibold flex items-center gap-2 hover:bg-primary-container transition-all shadow-sm"
+          >
+            <span className="material-symbols-outlined">person_add</span>
+            Invite User
+          </button>
+        )}
       </div>
 
       {loadState === "loading" && <div className="p-12 text-center text-slate-500"><span className="material-symbols-outlined animate-spin text-3xl">sync</span></div>}
@@ -74,7 +80,7 @@ export default function UsersPage() {
                   <th className="p-4 font-semibold">Role</th>
                   <th className="p-4 font-semibold">Status</th>
                   <th className="p-4 font-semibold">Last Login</th>
-                  <th className="p-4 font-semibold text-right">Actions</th>
+                  {canEdit && <th className="p-4 font-semibold text-right">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-outline-variant">
@@ -104,11 +110,13 @@ export default function UsersPage() {
                     <td className="p-4 text-sm text-slate-500">
                       {u.lastLogin ? new Date(u.lastLogin).toLocaleDateString() : 'Never'}
                     </td>
-                    <td className="p-4 text-right">
-                      <button className="text-primary hover:text-teal-700 text-sm font-semibold">
-                        Edit
-                      </button>
-                    </td>
+                    {canEdit && (
+                      <td className="p-4 text-right">
+                        <button className="text-primary hover:text-primary text-sm font-semibold">
+                          Edit
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

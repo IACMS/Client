@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSession } from "@/context/SessionContext";
-import { apiGet, apiPatch } from "@/lib/api";
+import { apiFetch, apiGet, apiPatch, getApiBase } from "@/lib/api";
 
 type TenantConfig = {
   primaryColor?: string;
@@ -8,6 +8,31 @@ type TenantConfig = {
   logoUrl?: string;
   fontPreference?: string;
 };
+
+function getBrandingEditability(user: unknown): { canEdit: boolean; hasAuthSignal: boolean } {
+  if (!user || typeof user !== "object") return { canEdit: false, hasAuthSignal: true };
+  const u = user as Record<string, unknown>;
+
+  const hasFlagSignal = u.isSystemAdmin != null || u.isTenantAdmin != null;
+  if (u.isSystemAdmin === true || u.isTenantAdmin === true) return { canEdit: true, hasAuthSignal: true };
+  if (hasFlagSignal) return { canEdit: false, hasAuthSignal: true };
+
+  const role = u.role;
+  const roleName =
+    (role && typeof role === "object" ? (role as Record<string, unknown>).name : null) ??
+    u.roleName ??
+    u.role;
+
+  if (typeof roleName === "string" && roleName.trim()) {
+    const ok =
+      /(^|[^a-z])system[_\s-]?admin([^a-z]|$)/i.test(roleName) ||
+      /(^|[^a-z])tenant[_\s-]?admin([^a-z]|$)/i.test(roleName);
+    return { canEdit: ok, hasAuthSignal: true };
+  }
+
+  // We don't have reliable role info in the session payload. Allow UI edits and rely on backend 403.
+  return { canEdit: true, hasAuthSignal: false };
+}
 
 export default function TenantSettingsPage() {
   const { user, refresh } = useSession();
@@ -17,15 +42,21 @@ export default function TenantSettingsPage() {
     logoUrl: "",
     fontPreference: "Inter",
   });
+  const [logoFile, setLogoFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
+  const { canEdit, hasAuthSignal } = getBrandingEditability(user);
+  const settingsTenantId = user?.tenant?.id ?? user?.tenantId;
+  const apiBase = getApiBase();
+  const resolvedLogoUrl =
+    config.logoUrl && config.logoUrl.startsWith("/") ? `${apiBase}${config.logoUrl}` : (config.logoUrl ?? "");
 
   useEffect(() => {
-    if (!user?.tenant?.id) return;
+    if (!settingsTenantId) return;
     setLoading(true);
-    apiGet(`/api/v1/tenants/${user.tenant.id}`)
+    apiGet(`/api/v1/tenants/${settingsTenantId}`)
       .then((data: any) => {
         if (data.tenant?.config) {
           setConfig(prev => ({ ...prev, ...data.tenant.config }));
@@ -33,24 +64,48 @@ export default function TenantSettingsPage() {
       })
       .catch(() => setErrorMsg("Failed to load tenant configuration."))
       .finally(() => setLoading(false));
-  }, [user?.tenant?.id]);
+  }, [settingsTenantId]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user?.tenant?.id) return;
+    if (!settingsTenantId) return;
+    if (hasAuthSignal && !canEdit) {
+      setErrorMsg("You do not have permission to edit tenant branding.");
+      return;
+    }
     setSaving(true);
     setErrorMsg("");
     setSuccessMsg("");
     try {
-      await apiPatch(`/api/v1/tenants/${user.tenant.id}/config`, { config });
+      // Optional: upload a new logo asset first (backend expected to return { logoUrl } or { url }).
+      let nextConfig = config;
+      if (logoFile) {
+        const fd = new FormData();
+        fd.append("file", logoFile);
+        const up = (await apiFetch(`/api/v1/tenants/${settingsTenantId}/logo`, { method: "POST", body: fd })) as
+          | { logoUrl?: string; url?: string }
+          | null;
+        const url = up?.logoUrl ?? up?.url;
+        if (typeof url === "string" && url) {
+          nextConfig = { ...nextConfig, logoUrl: url };
+          setConfig(nextConfig);
+        }
+      }
+      // Backend validator expects an absolute URL for logoUrl; uploaded logos currently come back as a relative path.
+      const payloadConfig: TenantConfig = {
+        ...nextConfig,
+        logoUrl:
+          typeof nextConfig.logoUrl === "string" && nextConfig.logoUrl.startsWith("/")
+            ? `${apiBase}${nextConfig.logoUrl}`
+            : nextConfig.logoUrl,
+      };
+      await apiPatch(`/api/v1/tenants/${settingsTenantId}/config`, { config: payloadConfig });
       setSuccessMsg("Configuration saved successfully! The UI will update shortly.");
       // Apply theme locally immediately
-      if (config.primaryColor) {
-        document.documentElement.style.setProperty('--color-primary-hex', config.primaryColor);
-        // A naive way to just force the primary color if we were using a real dynamic theme engine
-        // For tailwind, usually you need CSS variables defined in tailwind.config.js
-      }
+      if (nextConfig.primaryColor) document.documentElement.style.setProperty("--iacms-primary", nextConfig.primaryColor);
+      if (nextConfig.secondaryColor) document.documentElement.style.setProperty("--iacms-secondary", nextConfig.secondaryColor);
       await refresh(); // Refresh session to get updated tenant config
+      setLogoFile(null);
     } catch (err: any) {
       setErrorMsg(err.message || "Failed to save configuration.");
     } finally {
@@ -80,6 +135,31 @@ export default function TenantSettingsPage() {
         </p>
       </div>
 
+      {hasAuthSignal && !canEdit && (
+        <div className="mb-6 p-4 bg-amber-50 text-amber-900 rounded-lg border border-amber-200 flex items-start gap-2">
+          <span className="material-symbols-outlined mt-0.5">lock</span>
+          <div>
+            <p className="font-semibold">Read-only</p>
+            <p className="text-sm text-amber-900/80">
+              Only the system admin or tenant admin can change portal branding for this tenant.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {!hasAuthSignal && (
+        <div className="mb-6 p-4 bg-slate-50 text-slate-800 rounded-lg border border-slate-200 flex items-start gap-2">
+          <span className="material-symbols-outlined mt-0.5">info</span>
+          <div>
+            <p className="font-semibold">Admin check not available</p>
+            <p className="text-sm text-slate-700/80">
+              Your session payload doesn’t include role/admin fields, so the UI can’t reliably tell if you’re an admin.
+              You can edit here, and the backend will enforce permissions.
+            </p>
+          </div>
+        </div>
+      )}
+
       {successMsg && (
         <div className="mb-6 p-4 bg-emerald-50 text-emerald-800 rounded-lg border border-emerald-200 flex items-center gap-2">
           <span className="material-symbols-outlined">check_circle</span>
@@ -107,13 +187,30 @@ export default function TenantSettingsPage() {
               type="url"
               value={config.logoUrl || ""}
               onChange={e => setConfig({ ...config, logoUrl: e.target.value })}
+              disabled={!canEdit}
               className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-primary/50"
               placeholder="https://example.com/logo.png"
             />
-            {config.logoUrl && (
+            <div className="mt-3">
+              <label className="block text-xs font-label-caps text-slate-500 mb-1 uppercase">Or upload a logo</label>
+              <input
+                type="file"
+                accept="image/*"
+                disabled={!canEdit}
+                onChange={(e) => setLogoFile(e.target.files?.[0] ?? null)}
+                className="block w-full text-sm text-slate-700 file:mr-4 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200"
+              />
+              <p className="text-xs text-slate-500 mt-1">Upload requires backend support at <span className="font-mono">POST /api/v1/tenants/:id/logo</span>.</p>
+            </div>
+            {resolvedLogoUrl && (
               <div className="mt-4 p-4 border border-slate-200 rounded-lg bg-slate-50 inline-block">
                 <p className="text-xs font-label-caps text-slate-500 mb-2">PREVIEW</p>
-                <img src={config.logoUrl} alt="Logo Preview" className="h-12 object-contain" onError={(e) => (e.currentTarget.style.display = 'none')} />
+                <img
+                  src={resolvedLogoUrl}
+                  alt="Logo Preview"
+                  className="h-12 object-contain"
+                  onError={(e) => (e.currentTarget.style.display = "none")}
+                />
               </div>
             )}
           </div>
@@ -126,12 +223,14 @@ export default function TenantSettingsPage() {
                   type="color"
                   value={config.primaryColor || "#0f766e"}
                   onChange={e => setConfig({ ...config, primaryColor: e.target.value })}
+                  disabled={!canEdit}
                   className="h-10 w-16 p-1 border border-slate-300 rounded cursor-pointer"
                 />
                 <input
                   type="text"
                   value={config.primaryColor || ""}
                   onChange={e => setConfig({ ...config, primaryColor: e.target.value })}
+                  disabled={!canEdit}
                   className="flex-1 px-4 py-2 rounded-lg border border-slate-300 font-mono text-sm uppercase"
                   placeholder="#0F766E"
                 />
@@ -145,12 +244,14 @@ export default function TenantSettingsPage() {
                   type="color"
                   value={config.secondaryColor || "#115e59"}
                   onChange={e => setConfig({ ...config, secondaryColor: e.target.value })}
+                  disabled={!canEdit}
                   className="h-10 w-16 p-1 border border-slate-300 rounded cursor-pointer"
                 />
                 <input
                   type="text"
                   value={config.secondaryColor || ""}
                   onChange={e => setConfig({ ...config, secondaryColor: e.target.value })}
+                  disabled={!canEdit}
                   className="flex-1 px-4 py-2 rounded-lg border border-slate-300 font-mono text-sm uppercase"
                   placeholder="#115E59"
                 />
@@ -163,6 +264,7 @@ export default function TenantSettingsPage() {
             <select
               value={config.fontPreference || "Inter"}
               onChange={e => setConfig({ ...config, fontPreference: e.target.value })}
+              disabled={!canEdit}
               className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-primary/50 bg-white"
             >
               <option value="Inter">Inter (Default)</option>
@@ -177,13 +279,14 @@ export default function TenantSettingsPage() {
           <button
             type="button"
             className="px-6 py-2.5 rounded-lg font-semibold text-slate-600 hover:bg-slate-200 transition-colors"
+            disabled={hasAuthSignal && !canEdit}
           >
             Reset
           </button>
           <button
             type="submit"
-            disabled={saving}
-            className="px-6 py-2.5 rounded-lg font-semibold bg-primary text-white hover:bg-teal-700 transition-colors flex items-center gap-2 disabled:opacity-70"
+            disabled={saving || (hasAuthSignal && !canEdit)}
+            className="px-6 py-2.5 rounded-lg font-semibold bg-primary text-white hover:bg-primary transition-colors flex items-center gap-2 disabled:opacity-70"
           >
             {saving ? (
               <span className="material-symbols-outlined animate-spin text-[20px]">sync</span>

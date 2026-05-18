@@ -1,46 +1,27 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
-import { ApiError, apiDelete, apiGet, apiPost } from "@/lib/api";
+import { ApiError, apiDelete, apiPost } from "@/lib/api";
 import WorkflowStepModal, { type WorkflowStepEditPayload } from "@/components/WorkflowStepModal";
-import WorkflowTransitionModal, { type WorkflowTransitionEditPayload } from "@/components/WorkflowTransitionModal";
+import WorkflowTransitionModal, {
+  type WorkflowTransitionEditPayload,
+} from "@/components/WorkflowTransitionModal";
 import ConfirmDialog from "@/components/ConfirmDialog";
-import { fetchRbacRoles, roleNamesForIds, type RbacRoleRow } from "@/lib/workflowRoles";
+import ForbiddenView from "@/components/ForbiddenView";
+import WorkflowDesignerHeader from "@/components/workflow-designer/WorkflowDesignerHeader";
+import WorkflowDesignerCanvas from "@/components/workflow-designer/WorkflowDesignerCanvas";
+import { usePermissions } from "@/permissions/usePermissions";
+import { fetchRbacRoles, prepareRolesForWorkflowPickers, type RbacRoleRow } from "@/lib/workflowRoles";
 import { validateWorkflowForPublish } from "@/lib/workflowPublishValidate";
-
-type WorkflowStep = {
-  id: string;
-  key: string;
-  name: string;
-  description?: string | null;
-  isInitial: boolean;
-  isFinal: boolean;
-  requiresAttachment?: boolean;
-  position: number;
-  allowedRoleIds?: string[];
-};
-type WorkflowTransition = {
-  id: string;
-  fromStepId: string;
-  toStepId: string;
-  name: string;
-  description?: string | null;
-  requiresComment: boolean;
-  allowedRoleIds?: string[];
-};
-type ApiWorkflow = {
-  id: string;
-  name: string;
-  status: string;
-  version?: number;
-  steps: WorkflowStep[];
-  transitions: WorkflowTransition[];
-};
+import { useWorkflow, type WorkflowStep, type WorkflowTransition } from "@/hooks/useWorkflow";
 
 export default function WorkflowDesignerPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [workflow, setWorkflow] = useState<ApiWorkflow | null>(null);
-  const [loadState, setLoadState] = useState<"loading" | "ok" | "error">("loading");
+  const { can } = usePermissions();
+  const canConfigure = can("workflows:update");
+
+  const { workflow, loadState, loadError, reload } = useWorkflow(id);
+
   const [stepModalOpen, setStepModalOpen] = useState(false);
   const [stepEditing, setStepEditing] = useState<WorkflowStepEditPayload | null>(null);
   const [transitionModalOpen, setTransitionModalOpen] = useState(false);
@@ -51,57 +32,22 @@ export default function WorkflowDesignerPage() {
   const [publishBusy, setPublishBusy] = useState(false);
   const [publishMessage, setPublishMessage] = useState("");
   const [bannerError, setBannerError] = useState<string | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [deleteTransition, setDeleteTransition] = useState<WorkflowTransition | null>(null);
+  const [deleteTransitionBusy, setDeleteTransitionBusy] = useState(false);
   const [rbacRoles, setRbacRoles] = useState<RbacRoleRow[]>([]);
 
-  const loadWorkflow = useCallback(async () => {
-    if (!id) return;
-    setLoadError(null);
-    try {
-      const data = (await apiGet(`/api/v1/workflows/${encodeURIComponent(id)}/full`)) as {
-        workflow?: ApiWorkflow;
-      };
-      const wf = data?.workflow;
-      if (!wf || !Array.isArray(wf.steps) || !Array.isArray(wf.transitions)) {
-        setLoadError("Invalid response from server (missing workflow steps).");
-        setWorkflow(null);
-        setLoadState("error");
-        return;
-      }
-      setWorkflow({
-        ...wf,
-        steps: wf.steps,
-        transitions: wf.transitions,
-      });
-      setLoadState("ok");
-      setBannerError(null);
-    } catch (e) {
-      setWorkflow(null);
-      setLoadState("error");
-      setLoadError(
-        e instanceof ApiError
-          ? e.message
-          : e instanceof Error
-            ? e.message
-            : "Request failed. Check that the API is running and you are signed in.",
-      );
-    }
-  }, [id]);
-
   useEffect(() => {
-    void loadWorkflow();
-  }, [loadWorkflow]);
-
-  useEffect(() => {
+    const tid = workflow?.tenantId;
+    if (!tid) return;
     let cancelled = false;
     void (async () => {
-      const list = await fetchRbacRoles();
+      const list = prepareRolesForWorkflowPickers(await fetchRbacRoles({ tenantId: tid }));
       if (!cancelled) setRbacRoles(list);
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [workflow?.tenantId]);
 
   function openAddStep() {
     setStepEditing(null);
@@ -141,6 +87,9 @@ export default function WorkflowDesignerPage() {
       toStepId: t.toStepId,
       requiresComment: t.requiresComment,
       allowedRoleIds: t.allowedRoleIds ?? [],
+      timeLimitType: t.timeLimitType ?? "NONE",
+      timeLimitAmount: t.timeLimitAmount ?? null,
+      timeLimitUnit: t.timeLimitUnit ?? null,
     });
     setTransitionModalOpen(true);
   }
@@ -150,14 +99,20 @@ export default function WorkflowDesignerPage() {
     setTransitionEditing(null);
   }
 
-  async function deleteTransitionRow(t: WorkflowTransition) {
-    if (!id || workflow?.status !== "DRAFT") return;
-    if (!confirm(`Remove transition “${t.name}”?`)) return;
+  async function confirmDeleteTransition() {
+    if (!id || !deleteTransition || workflow?.status !== "DRAFT") return;
+    setDeleteTransitionBusy(true);
     try {
-      await apiDelete(`/api/v1/workflows/${encodeURIComponent(id)}/transitions/${encodeURIComponent(t.id)}`);
-      await loadWorkflow();
+      await apiDelete(
+        `/api/v1/workflows/${encodeURIComponent(id)}/transitions/${encodeURIComponent(deleteTransition.id)}`,
+      );
+      setDeleteTransition(null);
+      await reload();
     } catch (err) {
       setBannerError(err instanceof ApiError ? err.message : "Could not delete transition.");
+      setDeleteTransition(null);
+    } finally {
+      setDeleteTransitionBusy(false);
     }
   }
 
@@ -174,7 +129,7 @@ export default function WorkflowDesignerPage() {
         return;
       }
       navigate(`/workflows/${encodeURIComponent(newId)}/designer`, { replace: true });
-      void loadWorkflow();
+      void reload();
     } catch (err) {
       setBannerError(err instanceof ApiError ? err.message : "Could not create new version.");
     }
@@ -234,13 +189,24 @@ export default function WorkflowDesignerPage() {
     }
   }
 
-  if (loadState === "loading")
+  if (loadState === "loading") {
     return (
       <div className="p-12 text-center text-slate-500">
         <span className="material-symbols-outlined animate-spin text-3xl">sync</span>
       </div>
     );
-  if (loadState === "error" || !workflow)
+  }
+  if (loadState === "forbidden") {
+    return (
+      <ForbiddenView
+        resource="this workflow"
+        detail={loadError ?? undefined}
+        backTo="/workflows"
+        backLabel="Back to workflows"
+      />
+    );
+  }
+  if (loadState === "error" || !workflow) {
     return (
       <div className="p-12 max-w-lg mx-auto text-center space-y-4">
         <p className="text-red-600 font-semibold">Could not load this workflow</p>
@@ -258,6 +224,7 @@ export default function WorkflowDesignerPage() {
         </Link>
       </div>
     );
+  }
 
   return (
     <div className="flex-1 flex flex-col h-[calc(100vh-4rem)] bg-slate-50 overflow-hidden">
@@ -266,13 +233,15 @@ export default function WorkflowDesignerPage() {
           <WorkflowStepModal
             open={stepModalOpen}
             onClose={closeStepModal}
+            workflowTenantId={workflow.tenantId}
             workflowId={id}
             editStep={stepEditing}
-            onSaved={loadWorkflow}
+            onSaved={reload}
           />
           <WorkflowTransitionModal
             open={transitionModalOpen}
             onClose={closeTransitionModal}
+            workflowTenantId={workflow.tenantId}
             workflowId={id}
             steps={workflow.steps.map((s) => ({
               id: s.id,
@@ -292,7 +261,7 @@ export default function WorkflowDesignerPage() {
                 };
               })}
             editTransition={transitionEditing}
-            onSaved={loadWorkflow}
+            onSaved={reload}
           />
         </>
       )}
@@ -316,77 +285,36 @@ export default function WorkflowDesignerPage() {
         onCancel={() => !deleteDraftBusy && setDeleteDraftOpen(false)}
         onConfirm={() => void confirmDeleteDraft()}
       />
+      <ConfirmDialog
+        open={!!deleteTransition}
+        title="Delete this transition?"
+        message={
+          deleteTransition
+            ? `Remove transition "${deleteTransition.name}". This cannot be undone once published versions reference it.`
+            : ""
+        }
+        confirmLabel="Delete"
+        variant="danger"
+        busy={deleteTransitionBusy}
+        onCancel={() => !deleteTransitionBusy && setDeleteTransition(null)}
+        onConfirm={() => void confirmDeleteTransition()}
+      />
 
-      <div className="bg-white border-b border-outline-variant p-4 flex justify-between items-center shrink-0 shadow-sm z-10">
-        <div>
-          <nav className="flex text-[10px] font-label-caps text-secondary mb-1 gap-x-2">
-            <Link to="/workflows" className="hover:text-primary">
-              WORKFLOWS
-            </Link>
-            <span>/</span>
-            <span className="text-primary font-bold">DESIGNER</span>
-          </nav>
-          <h1 className="font-h2 text-slate-800 flex items-center gap-2 flex-wrap">
-            {workflow.name}
-            <span className="text-xs font-mono text-slate-500">v{workflow.version ?? 1}</span>
-            <span
-              className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                workflow.status === "PUBLISHED"
-                  ? "bg-emerald-100 text-emerald-800"
-                  : workflow.status === "ARCHIVED"
-                    ? "bg-amber-100 text-amber-900"
-                    : "bg-slate-100 text-slate-600"
-              }`}
-            >
-              {workflow.status}
-            </span>
-          </h1>
+      <WorkflowDesignerHeader
+        workflow={workflow}
+        onAddStep={openAddStep}
+        onAddTransition={openAddTransition}
+        onAbandonDraft={() => setDeleteDraftOpen(true)}
+        onPublish={requestPublish}
+        onCreateNewVersion={() => void createNewVersionFromThis()}
+      />
+
+      {!canConfigure && (
+        <div className="shrink-0 mx-4 mt-3 p-3 rounded-lg bg-slate-100 border border-slate-200 text-slate-700 text-sm">
+          <span className="font-semibold">Read-only view.</span> You can explore steps and transitions; only workflow editors
+          can change or publish definitions.
         </div>
-        <div className="flex gap-2 flex-wrap">
-          {workflow.status !== "DRAFT" && (
-            <button
-              type="button"
-              onClick={() => void createNewVersionFromThis()}
-              className="px-4 py-2 bg-primary text-white rounded text-sm font-semibold hover:bg-teal-700 transition-colors flex items-center gap-2 shadow-sm"
-            >
-              <span className="material-symbols-outlined text-[18px]">difference</span>
-              New version (editable draft)
-            </button>
-          )}
-          {workflow.status === "DRAFT" && (
-            <>
-              <button
-                type="button"
-                onClick={openAddStep}
-                className="px-4 py-2 bg-white border border-slate-300 rounded text-sm font-semibold hover:bg-slate-50 transition-colors flex items-center gap-2"
-              >
-                <span className="material-symbols-outlined text-[18px]">add_circle</span> Add step
-              </button>
-              <button
-                type="button"
-                onClick={openAddTransition}
-                className="px-4 py-2 bg-white border border-slate-300 rounded text-sm font-semibold hover:bg-slate-50 transition-colors flex items-center gap-2"
-              >
-                <span className="material-symbols-outlined text-[18px]">moving</span> Add transition
-              </button>
-              <button
-                type="button"
-                onClick={() => setDeleteDraftOpen(true)}
-                className="px-4 py-2 bg-white border border-red-200 text-red-800 rounded text-sm font-semibold hover:bg-red-50 transition-colors flex items-center gap-2"
-              >
-                <span className="material-symbols-outlined text-[18px]">delete</span> Abandon draft
-              </button>
-              <button
-                type="button"
-                onClick={requestPublish}
-                className="px-4 py-2 bg-primary text-white rounded text-sm font-semibold hover:bg-teal-700 transition-colors flex items-center gap-2 shadow-sm"
-              >
-                <span className="material-symbols-outlined text-[18px]">publish</span> Publish
-              </button>
-            </>
-          )}
-        </div>
-      </div>
+      )}
 
       {bannerError && (
         <div className="shrink-0 mx-4 mt-3 p-3 rounded-lg bg-red-50 border border-red-200 text-red-800 text-sm flex justify-between gap-3 items-start">
@@ -397,129 +325,15 @@ export default function WorkflowDesignerPage() {
         </div>
       )}
 
-      <div className="flex-1 p-6 overflow-auto bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] relative">
-        {workflow.steps.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-slate-400">
-            <span className="material-symbols-outlined text-6xl mb-4 opacity-50">account_tree</span>
-            <p className="text-lg">Canvas is empty</p>
-            <p className="text-sm">Add a step to begin designing.</p>
-            {workflow.status === "DRAFT" && (
-              <button
-                type="button"
-                onClick={openAddStep}
-                className="mt-6 px-5 py-2.5 bg-primary text-white rounded-lg text-sm font-semibold hover:bg-primary-container"
-              >
-                Add first step
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 auto-rows-max">
-            {workflow.steps.map((step) => {
-              const stepRoles = roleNamesForIds(rbacRoles, step.allowedRoleIds);
-              return (
-                <div
-                  key={step.id}
-                  className={`bg-white border-2 rounded-xl p-4 shadow-sm relative ${
-                    step.isInitial ? "border-teal-500" : step.isFinal ? "border-amber-500" : "border-slate-200"
-                  }`}
-                >
-                  {workflow.status === "DRAFT" && (
-                    <button
-                      type="button"
-                      onClick={() => openEditStep(step)}
-                      className="absolute top-2 right-2 p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
-                      aria-label="Edit step"
-                    >
-                      <span className="material-symbols-outlined text-[18px]">edit</span>
-                    </button>
-                  )}
-                  {step.isInitial && (
-                    <div className="absolute -top-3 left-4 bg-teal-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
-                      INITIAL
-                    </div>
-                  )}
-                  {step.isFinal && (
-                    <div className="absolute -top-3 left-4 bg-amber-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
-                      FINAL
-                    </div>
-                  )}
-
-                  <h3 className="font-bold text-slate-800 mt-2 pr-10">{step.name}</h3>
-                  <p className="text-[10px] text-slate-400 font-mono mb-2">key: {step.key}</p>
-                  {step.requiresAttachment && (
-                    <p className="text-[10px] font-semibold text-teal-800 bg-teal-50 border border-teal-100 rounded px-2 py-1 mb-2 inline-flex items-center gap-1">
-                      <span className="material-symbols-outlined text-[14px]">attach_file</span>
-                      Attachment required to proceed
-                    </p>
-                  )}
-                  {stepRoles.length > 0 ? (
-                    <p className="text-[10px] text-slate-600 mb-3">
-                      <span className="font-semibold">Roles:</span> {stepRoles.join(", ")}
-                    </p>
-                  ) : (
-                    <p className="text-[10px] text-slate-400 mb-3">Roles: any</p>
-                  )}
-
-                  <div className="space-y-2 border-t border-slate-100 pt-3">
-                    <p className="text-xs font-label-caps text-slate-500">OUTGOING TRANSITIONS</p>
-                    {workflow.transitions.filter((t) => t.fromStepId === step.id).length === 0 && (
-                      <p className="text-xs text-slate-400 italic">None</p>
-                    )}
-                    {workflow.transitions
-                      .filter((t) => t.fromStepId === step.id)
-                      .map((t) => {
-                        const target = workflow.steps.find((s) => s.id === t.toStepId);
-                        const trRoles = roleNamesForIds(rbacRoles, t.allowedRoleIds);
-                        return (
-                          <div
-                            key={t.id}
-                            className="bg-slate-50 border border-slate-200 rounded p-2 text-xs flex flex-col gap-1"
-                          >
-                            <div className="flex justify-between items-start gap-2">
-                              <div className="flex justify-between items-center gap-2 flex-1 min-w-0">
-                                <span className="font-semibold text-primary truncate">{t.name}</span>
-                                <span className="flex items-center gap-1 text-slate-500 shrink-0">
-                                  <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
-                                  {target?.name}
-                                </span>
-                              </div>
-                              {workflow.status === "DRAFT" && (
-                                <div className="flex gap-0.5 shrink-0">
-                                  <button
-                                    type="button"
-                                    onClick={() => openEditTransition(t)}
-                                    className="p-1 rounded text-slate-600 hover:bg-slate-200"
-                                    aria-label="Edit transition"
-                                  >
-                                    <span className="material-symbols-outlined text-[16px]">edit</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => void deleteTransitionRow(t)}
-                                    className="p-1 rounded text-red-700 hover:bg-red-100"
-                                    aria-label="Delete transition"
-                                  >
-                                    <span className="material-symbols-outlined text-[16px]">close</span>
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                            {trRoles.length > 0 ? (
-                              <span className="text-[10px] text-slate-500">Execute: {trRoles.join(", ")}</span>
-                            ) : (
-                              <span className="text-[10px] text-slate-400">Execute: any role</span>
-                            )}
-                          </div>
-                        );
-                      })}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+      <WorkflowDesignerCanvas
+        workflow={workflow}
+        rbacRoles={rbacRoles}
+        canConfigure={canConfigure}
+        onAddStep={openAddStep}
+        onEditStep={openEditStep}
+        onEditTransition={openEditTransition}
+        onDeleteTransition={(t) => setDeleteTransition(t)}
+      />
     </div>
   );
 }

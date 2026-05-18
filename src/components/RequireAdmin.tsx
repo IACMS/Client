@@ -1,9 +1,15 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
-import { useSession } from "@/context/SessionContext";
+import { useIsAdmin, useSession } from "@/context/SessionContext";
 
-/** Wrap portal routes; redirects to `/login` when there is no session. */
-export default function RequireAuth() {
+/**
+ * Wrap admin-only portal routes. Renders the child route when the current
+ * user is a system or tenant admin, otherwise redirects to `/dashboard`
+ * (or `/login` if there is no session). The backend remains the source of
+ * truth; this guard just prevents non-admin users from reaching admin UI.
+ */
+export default function RequireAdmin() {
   const { user, status } = useSession();
+  const { isAdmin } = useIsAdmin();
   const location = useLocation();
 
   if (status === "loading") {
@@ -15,7 +21,7 @@ export default function RequireAuth() {
         >
           progress_activity
         </span>
-        <p className="font-body-sm">Checking session…</p>
+        <p className="font-body-sm">Checking permissions…</p>
       </div>
     );
   }
@@ -24,13 +30,8 @@ export default function RequireAuth() {
     return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
   }
 
-  /** Block app routes until first password change (admin-created / invited users). Allowed: `/settings` only. */
-  if (user.mustChangePassword === true) {
-    const path = location.pathname;
-    const onPasswordPage = path === "/settings" || path === "/settings/";
-    if (!onPasswordPage) {
-      return <Navigate to="/settings" replace state={{ from: path + location.search }} />;
-    }
+  if (!isAdmin) {
+    return <Navigate to="/dashboard" replace />;
   }
 
   return <Outlet />;

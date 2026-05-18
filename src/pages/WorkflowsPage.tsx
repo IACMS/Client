@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useSession } from "@/context/SessionContext";
-import { apiGet } from "@/lib/api";
+import { apiGet, isAbortError } from "@/lib/api";
 import CreateWorkflowModal from "@/components/CreateWorkflowModal";
+import Can from "@/permissions/Can";
+import { usePermissions } from "@/permissions/usePermissions";
 
 type ApiWorkflow = {
   id: string;
@@ -18,30 +20,35 @@ type WorkflowsResponse = { workflows?: ApiWorkflow[] };
 
 export default function WorkflowsPage() {
   const { user } = useSession();
-  const tenantId = user?.tenant?.id;
+  const tenantId = user?.tenant?.id ?? user?.tenantId;
   const navigate = useNavigate();
+  const { can } = usePermissions();
+  const canConfigure = can("workflows:update");
   const [workflows, setWorkflows] = useState<ApiWorkflow[]>([]);
   const [loadState, setLoadState] = useState<"loading" | "ok" | "error">("loading");
   const [createOpen, setCreateOpen] = useState(false);
 
   useEffect(() => {
-    let cancelled = false;
+    const ac = new AbortController();
     (async () => {
       if (!tenantId) {
         setLoadState("error");
         return;
       }
       try {
-        const data = await apiGet(`/api/v1/workflows?tenantId=${tenantId}`) as WorkflowsResponse;
-        if (!cancelled) {
+        const data = (await apiGet(`/api/v1/workflows?tenantId=${tenantId}`, {
+          signal: ac.signal,
+        })) as WorkflowsResponse;
+        if (!ac.signal.aborted) {
           setWorkflows(data.workflows || []);
           setLoadState("ok");
         }
       } catch (e) {
-        if (!cancelled) setLoadState("error");
+        if (isAbortError(e) || ac.signal.aborted) return;
+        setLoadState("error");
       }
     })();
-    return () => { cancelled = true; };
+    return () => ac.abort();
   }, [tenantId]);
 
   return (
@@ -62,15 +69,17 @@ export default function WorkflowsPage() {
           <h1 className="font-h1 text-primary">Workflow Management</h1>
           <p className="font-body-md text-slate-600 mt-1">Design and publish cross-agency lifecycle engines.</p>
         </div>
-        <button
-          type="button"
-          onClick={() => setCreateOpen(true)}
-          disabled={!tenantId}
-          className="bg-primary text-white px-6 py-2.5 rounded-lg font-semibold flex items-center gap-2 hover:bg-primary-container transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <span className="material-symbols-outlined">add</span>
-          Create workflow
-        </button>
+        <Can permission="workflows:create">
+          <button
+            type="button"
+            onClick={() => setCreateOpen(true)}
+            disabled={!tenantId}
+            className="bg-primary text-white px-6 py-2.5 rounded-lg font-semibold flex items-center gap-2 hover:bg-primary-container transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <span className="material-symbols-outlined">add</span>
+            Create workflow
+          </button>
+        </Can>
       </div>
 
       {loadState === "loading" && <div className="p-12 text-center text-slate-500"><span className="material-symbols-outlined animate-spin text-3xl">sync</span></div>}
@@ -99,16 +108,22 @@ export default function WorkflowsPage() {
           ))}
           {workflows.length === 0 && (
             <div className="col-span-full bg-slate-50 border border-dashed border-slate-300 rounded-xl p-12 text-center space-y-4">
-              <p className="text-slate-500">No workflows found. Create a draft to get started.</p>
-              <button
-                type="button"
-                onClick={() => setCreateOpen(true)}
-                disabled={!tenantId}
-                className="inline-flex items-center gap-2 bg-primary text-white px-5 py-2 rounded-lg font-semibold hover:bg-primary-container disabled:opacity-50"
-              >
-                <span className="material-symbols-outlined text-lg">add</span>
-                Create workflow
-              </button>
+              <p className="text-slate-500">
+                {canConfigure
+                  ? "No workflows found. Create a draft to get started."
+                  : "No workflows have been published for your tenant yet. Contact your agency administrator."}
+              </p>
+              <Can permission="workflows:create">
+                <button
+                  type="button"
+                  onClick={() => setCreateOpen(true)}
+                  disabled={!tenantId}
+                  className="inline-flex items-center gap-2 bg-primary text-white px-5 py-2 rounded-lg font-semibold hover:bg-primary-container disabled:opacity-50"
+                >
+                  <span className="material-symbols-outlined text-lg">add</span>
+                  Create workflow
+                </button>
+              </Can>
             </div>
           )}
         </div>

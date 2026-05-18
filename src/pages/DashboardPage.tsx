@@ -1,9 +1,11 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { useSession } from "@/context/SessionContext";
+import { useIsAdmin, useSession } from "@/context/SessionContext";
 import CreateCaseModal from "@/components/CreateCaseModal";
-import { apiGet } from "@/lib/api";
+import Can from "@/permissions/Can";
+import { useTenantApi } from "@/lib/tenantApi";
 import type { ApiCase } from "@/lib/casesApi";
+import PlatformDashboardPage from "./PlatformDashboardPage";
 
 function dashCount(value: number | null, loading: boolean): string {
   if (loading) return "…";
@@ -12,10 +14,17 @@ function dashCount(value: number | null, loading: boolean): string {
 }
 
 export default function DashboardPage() {
+  const { isSystemAdmin } = useIsAdmin();
+  if (isSystemAdmin) return <PlatformDashboardPage />;
+  return <OperationalDashboard />;
+}
+
+function OperationalDashboard() {
   const { user } = useSession();
   const navigate = useNavigate();
   const greeting = [user?.firstName, user?.lastName].filter(Boolean).join(" ") || user?.email || "there";
-  const tenantId = user?.tenant?.id ?? "";
+  const tenantId = user?.tenant?.id ?? user?.tenantId ?? "";
+  const { get: getTenantScoped } = useTenantApi();
   const [createCaseOpen, setCreateCaseOpen] = useState(false);
 
   const [loading, setLoading] = useState(true);
@@ -24,39 +33,38 @@ export default function DashboardPage() {
   const [workflowCount, setWorkflowCount] = useState<number | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
+    const ac = new AbortController();
     (async () => {
       setLoading(true);
+      const opts = { signal: ac.signal };
       const results = { cases: null as number | null, ref: null as number | null, wf: null as number | null };
       try {
-        const d = (await apiGet("/api/v1/cases")) as { cases?: ApiCase[] };
+        const d = (await getTenantScoped("/api/v1/cases", {}, opts)) as { cases?: ApiCase[] };
         results.cases = Array.isArray(d.cases) ? d.cases.length : 0;
       } catch {
         results.cases = null;
       }
       try {
-        const d = (await apiGet("/api/v1/referrals")) as { referrals?: unknown[] };
+        const d = (await getTenantScoped("/api/v1/referrals", {}, opts)) as { referrals?: unknown[] };
         results.ref = Array.isArray(d.referrals) ? d.referrals.length : 0;
       } catch {
         results.ref = null;
       }
       try {
-        const d = (await apiGet("/api/v1/workflows")) as { workflows?: unknown[] };
+        const d = (await getTenantScoped("/api/v1/workflows", {}, opts)) as { workflows?: unknown[] };
         results.wf = Array.isArray(d.workflows) ? d.workflows.length : 0;
       } catch {
         results.wf = null;
       }
-      if (!cancelled) {
+      if (!ac.signal.aborted) {
         setCaseCount(results.cases);
         setReferralCount(results.ref);
         setWorkflowCount(results.wf);
         setLoading(false);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    return () => ac.abort();
+  }, [getTenantScoped]);
 
   return (
       <div className="p-gutter max-w-7xl mx-auto space-y-gutter pb-8">
@@ -84,22 +92,17 @@ export default function DashboardPage() {
             </p>
           </div>
           <div className="flex gap-2 flex-wrap">
-            <button
-              type="button"
-              className="px-4 py-2 bg-white border border-slate-200 rounded-md text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors flex items-center gap-2"
-            >
-              <span className="material-symbols-outlined text-base">calendar_today</span>
-              Last 24 Hours
-            </button>
-            <button
-              type="button"
-              disabled={!tenantId || !user?.id}
-              onClick={() => setCreateCaseOpen(true)}
-              className="px-4 py-2 bg-primary-container text-white rounded-md text-xs font-semibold hover:bg-teal-800 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <span className="material-symbols-outlined text-base">add</span>
-              New Case
-            </button>
+            <Can permission="cases:create">
+              <button
+                type="button"
+                disabled={!tenantId || !user?.id}
+                onClick={() => setCreateCaseOpen(true)}
+                className="px-4 py-2 bg-primary-container text-white rounded-md text-xs font-semibold hover:bg-teal-800 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <span className="material-symbols-outlined text-base">add</span>
+                New Case
+              </button>
+            </Can>
           </div>
         </div>
 
@@ -151,46 +154,66 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div className="col-span-12 lg:col-span-8 bg-white rounded-lg border border-slate-200 overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center gap-4 flex-wrap">
-              <h3 className="font-h3 text-base text-teal-900 flex items-center gap-2">
-                <span className="material-symbols-outlined">priority_high</span>
-                Urgent Tasks &amp; Escalations
-              </h3>
-              <span className="text-[10px] font-bold py-1 px-2 rounded-md bg-error text-white shrink-0">4 CRITICAL</span>
+          {/*
+            Demo-only "Urgent Tasks" panel. The buttons render no privileged action
+            on the backend and are gated by `cases:approve` so a Case Registrar
+            never sees mock Approve/Sign affordances. Replace with real data when
+            wired to the workflow service.
+          */}
+          <Can permission="cases:update">
+            <div className="col-span-12 lg:col-span-8 bg-white rounded-lg border border-slate-200 overflow-hidden">
+              <div className="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center gap-4 flex-wrap">
+                <h3 className="font-h3 text-base text-teal-900 flex items-center gap-2">
+                  <span className="material-symbols-outlined">priority_high</span>
+                  Urgent Tasks &amp; Escalations
+                  <span
+                    className="ml-1 text-[10px] font-bold uppercase tracking-wider bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded"
+                    title="Static placeholder — not yet wired to backend"
+                  >
+                    DEMO
+                  </span>
+                </h3>
+                <span className="text-[10px] font-bold py-1 px-2 rounded-md bg-error text-white shrink-0">4 CRITICAL</span>
+              </div>
+              <div className="divide-y divide-slate-100">
+                <TaskRow
+                  stripeClass="bg-error"
+                  title="Case #48102-Escalation"
+                  idTag="TX-902"
+                  desc="Eligibility verification required for emergency housing referral."
+                  meta={["2h remaining", "Admin A. Chen"]}
+                  action="REVIEW"
+                />
+                <TaskRow
+                  stripeClass="bg-amber-400"
+                  title="Inter-Agency Transfer #8821"
+                  idTag="IA-045"
+                  desc="Dept. of Health requesting medical history release for active case."
+                  meta={["4h remaining"]}
+                  action="APPROVE"
+                />
+                <TaskRow
+                  stripeClass="bg-amber-400"
+                  title="Compliance Audit Notification"
+                  idTag="AUD-77"
+                  desc="Quarterly system logs ready for review and digital signature."
+                  meta={["6h remaining"]}
+                  action="SIGN"
+                />
+              </div>
             </div>
-            <div className="divide-y divide-slate-100">
-              <TaskRow
-                stripeClass="bg-error"
-                title="Case #48102-Escalation"
-                idTag="TX-902"
-                desc="Eligibility verification required for emergency housing referral."
-                meta={["2h remaining", "Admin A. Chen"]}
-                action="REVIEW"
-              />
-              <TaskRow
-                stripeClass="bg-amber-400"
-                title="Inter-Agency Transfer #8821"
-                idTag="IA-045"
-                desc="Dept. of Health requesting medical history release for active case."
-                meta={["4h remaining"]}
-                action="APPROVE"
-              />
-              <TaskRow
-                stripeClass="bg-amber-400"
-                title="Compliance Audit Notification"
-                idTag="AUD-77"
-                desc="Quarterly system logs ready for review and digital signature."
-                meta={["6h remaining"]}
-                action="SIGN"
-              />
-            </div>
-          </div>
+          </Can>
 
           <div className="col-span-12 lg:col-span-4 bg-white rounded-lg border border-slate-200 p-6 flex flex-col h-full min-h-[320px]">
             <h3 className="font-label-caps text-xs tracking-widest text-slate-500 mb-6 flex items-center gap-2">
               <span className="material-symbols-outlined text-sm">dynamic_feed</span>
               INTER-AGENCY ACTIVITY
+              <span
+                className="ml-auto text-[10px] font-bold uppercase tracking-wider bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded"
+                title="Static placeholder — not yet wired to backend"
+              >
+                DEMO
+              </span>
             </h3>
             <div className="space-y-6 relative before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-[2px] before:bg-slate-100">
               <ActivityItem icon="sync" border="border-teal-600" time="10:42 AM • DEPT_LABOR" text="Employment verification synced for Case #99281." />
@@ -198,18 +221,22 @@ export default function DashboardPage() {
               <ActivityItem icon="done_all" border="border-emerald-500" iconCls="text-emerald-500" time="08:02 AM • SYSTEM" text="Automated batch referral process completed successfully (42 items)." />
               <ActivityItem icon="outgoing_mail" border="border-teal-600" time="Yesterday • STATE_HEALTH" text="Transferred ownership of Case #44012 to Regional Office B." />
             </div>
-            <button
-              type="button"
-              title="Demo only — not wired yet"
-              className="mt-auto pt-6 text-center text-xs font-bold text-teal-700 hover:text-teal-900 border-t border-slate-100 mt-6 w-full bg-transparent cursor-default border-x-0 border-b-0"
-            >
-              VIEW FULL AUDIT LOG
-            </button>
+            <p className="mt-auto pt-6 text-center text-[10px] font-bold text-slate-400 border-t border-slate-100 mt-6 w-full uppercase tracking-wider">
+              Audit log view coming soon
+            </p>
           </div>
 
           <div className="col-span-12 bg-white rounded-lg border border-slate-200 overflow-hidden">
             <div className="p-6">
-              <h3 className="font-h3 text-lg text-teal-900 mb-1">Partner Agency Load</h3>
+              <h3 className="font-h3 text-lg text-teal-900 mb-1 flex items-center gap-2">
+                Partner Agency Load
+                <span
+                  className="text-[10px] font-bold uppercase tracking-wider bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded"
+                  title="Static placeholder — not yet wired to backend"
+                >
+                  DEMO
+                </span>
+              </h3>
               <p className="text-sm text-slate-500 mb-6">Distribution of shared cases across inter-agency partners.</p>
               <div className="overflow-x-auto">
                 <table className="w-full text-left">
