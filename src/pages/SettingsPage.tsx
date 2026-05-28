@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import PasswordInput from "@/components/PasswordInput";
 import { useSession } from "@/context/SessionContext";
 import { ApiError, apiGet, apiPatch, apiPost } from "@/lib/api";
 import { PASSWORD_HINT, isPasswordValid } from "@/lib/passwordRules";
@@ -113,10 +114,9 @@ export default function SettingsPage() {
         (location.state as { from?: string } | null)?.from && typeof (location.state as { from?: string }).from === "string"
           ? (location.state as { from: string }).from
           : null;
-      await apiPost("/api/v1/auth/change-password", {
-        currentPassword,
-        newPassword,
-      });
+      const body: { newPassword: string; currentPassword?: string } = { newPassword };
+      if (!mustChangeFirst) body.currentPassword = currentPassword;
+      await apiPost("/api/v1/auth/change-password", body);
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
@@ -133,64 +133,54 @@ export default function SettingsPage() {
     }
   }
 
-  function passwordFormSection(options: { heading: string; intro?: string }) {
+  function passwordFormSection(options: { heading: string; intro?: string; firstLogin?: boolean }) {
+    const firstLogin = options.firstLogin === true;
+    const canSubmit =
+      isPasswordValid(newPassword) &&
+      newPassword === confirmPassword &&
+      (firstLogin || currentPassword.length > 0);
+
     return (
       <section className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
         <h2 className="font-h3 text-teal-900 mb-2">{options.heading}</h2>
         {options.intro ? <p className="text-sm text-slate-600 mb-4">{options.intro}</p> : null}
         <form className="space-y-4 max-w-md" onSubmit={changePassword}>
-          <div>
-            <label className="block text-xs font-label-caps text-slate-500 mb-1 uppercase" htmlFor="cur">
-              Current password
-            </label>
-            <input
+          {!firstLogin ? (
+            <PasswordInput
               id="cur"
-              type="password"
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+              label="Current password"
               value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
+              onChange={setCurrentPassword}
               autoComplete="current-password"
               required
             />
-          </div>
-          <div>
-            <label className="block text-xs font-label-caps text-slate-500 mb-1 uppercase" htmlFor="np">
-              New password
-            </label>
-            <input
-              id="np"
-              type="password"
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              autoComplete="new-password"
-              required
-            />
-            <p className="text-[11px] text-slate-500 mt-1">{PASSWORD_HINT}</p>
-          </div>
-          <div>
-            <label className="block text-xs font-label-caps text-slate-500 mb-1 uppercase" htmlFor="cp">
-              Confirm new password
-            </label>
-            <input
-              id="cp"
-              type="password"
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              autoComplete="new-password"
-              required
-            />
-          </div>
+          ) : null}
+          <PasswordInput
+            id="np"
+            label={firstLogin ? "New password" : "New password"}
+            value={newPassword}
+            onChange={setNewPassword}
+            autoComplete="new-password"
+            required
+            hint={PASSWORD_HINT}
+          />
+          <PasswordInput
+            id="cp"
+            label="Confirm new password"
+            value={confirmPassword}
+            onChange={setConfirmPassword}
+            autoComplete="new-password"
+            required
+          />
           {pwdMessage && (
             <p className={`text-sm ${pwdMessage.includes("changed.") ? "text-teal-800" : "text-red-700"}`}>{pwdMessage}</p>
           )}
           <button
             type="submit"
-            disabled={pwdSaving || !isPasswordValid(newPassword) || newPassword !== confirmPassword}
+            disabled={pwdSaving || !canSubmit}
             className="bg-slate-800 text-white text-sm font-semibold px-4 py-2 rounded-lg disabled:opacity-50"
           >
-            {pwdSaving ? "Updating…" : "Update password"}
+            {pwdSaving ? "Updating…" : firstLogin ? "Set password and continue" : "Update password"}
           </button>
         </form>
       </section>
@@ -203,8 +193,8 @@ export default function SettingsPage() {
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-amber-950">
           <h1 className="font-h2 text-primary mb-2">Set a new password</h1>
           <p className="text-sm text-amber-900">
-            Your account was created with a temporary password. Choose a new password before using the rest of the
-            portal.
+            Your account was created with a temporary password (sent by email). Choose a new password below — you do not
+            need to enter the temporary password.
           </p>
           <p className="text-sm text-slate-700 mt-2 font-mono">
             {sessionUser?.email}
@@ -216,7 +206,10 @@ export default function SettingsPage() {
             ) : null}
           </p>
         </div>
-        {passwordFormSection({ heading: "Change password" })}
+        {passwordFormSection({
+          heading: "Set your password",
+          firstLogin: true,
+        })}
       </div>
     );
   }

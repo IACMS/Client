@@ -26,6 +26,19 @@ export class ApiError extends Error {
   }
 }
 
+/** Gateway/auth 403 when the user must set a new password first — not a RBAC denial. */
+export function isPasswordChangeRequiredError(body: unknown): boolean {
+  if (!body || typeof body !== "object") return false;
+  const o = body as Record<string, unknown>;
+  if (o.error === "PASSWORD_CHANGE_REQUIRED") return true;
+  const err = o.error;
+  if (err && typeof err === "object") {
+    const code = (err as { code?: string }).code;
+    if (code === "PASSWORD_CHANGE_REQUIRED") return true;
+  }
+  return false;
+}
+
 function extractErrorMessage(body: unknown): string {
   if (body && typeof body === "object") {
     const o = body as Record<string, unknown>;
@@ -168,11 +181,12 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<un
     }
   }
 
-  if (res.status === 403) {
+  const data = await parseResponse(res);
+
+  if (res.status === 403 && !isPasswordChangeRequiredError(data)) {
     authBus.emit("forbidden");
   }
 
-  const data = await parseResponse(res);
   if (!res.ok) {
     throw new ApiError(res.status, extractErrorMessage(data), data);
   }

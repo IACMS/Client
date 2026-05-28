@@ -84,7 +84,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       }
 
       const tenantId = resolvedTenantId;
-      if (tenantId) {
+      // Gateway blocks most routes until password is changed; skip tenant fetch to avoid a false 403 toast.
+      if (tenantId && !nextUser.mustChangePassword) {
         try {
           const t = (await apiGet(`/api/v1/tenants/${tenantId}`)) as { tenant?: SessionTenant } | null;
           if (t?.tenant) {
@@ -95,28 +96,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           // ignore tenant hydration errors (session still valid)
         }
       }
-      // #region agent log
-      fetch("http://127.0.0.1:7377/ingest/6302afe2-f95e-483b-b849-884818589670", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "99907a" },
-        body: JSON.stringify({
-          sessionId: "99907a",
-          runId: "post-session-normalize",
-          hypothesisId: "H1",
-          location: "SessionContext.tsx:refresh:afterHydrate",
-          message: "session user tenant shape (after normalize)",
-          data: {
-            hasNestedTenantId: Boolean(nextUser.tenant?.id),
-            nestedTenantIdLen: nextUser.tenant?.id?.length ?? 0,
-            hasFlatTenantId: Boolean(nextUser.tenantId),
-            flatTenantIdLen: nextUser.tenantId?.length ?? 0,
-            permissionCount: nextUser.permissions?.length ?? -1,
-            tenantNormalized: Boolean(resolvedTenantId),
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
       setUser(nextUser);
     } else {
       setUser(null);

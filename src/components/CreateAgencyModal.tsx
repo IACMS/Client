@@ -1,7 +1,6 @@
 import { FormEvent, useState } from "react";
 import { StubNavItem } from "@/components/StubNavItem";
 import { ApiError, apiPost } from "@/lib/api";
-import { PASSWORD_HINT, isPasswordValid } from "@/lib/passwordRules";
 
 type Props = {
   open: boolean;
@@ -24,8 +23,6 @@ export default function CreateAgencyModal({ open, onClose, onCreated }: Props) {
   const [lastName, setLastName] = useState("");
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [success, setSuccess] = useState<RegisterResponse | null>(null);
@@ -38,8 +35,6 @@ export default function CreateAgencyModal({ open, onClose, onCreated }: Props) {
     setLastName("");
     setUsername("");
     setEmail("");
-    setPassword("");
-    setConfirmPassword("");
     setErrorMessage(null);
     setSuccess(null);
     onClose();
@@ -56,16 +51,8 @@ export default function CreateAgencyModal({ open, onClose, onCreated }: Props) {
     const fn = firstName.trim();
     const ln = lastName.trim();
     const un = username.trim().toLowerCase();
-    if (!tn || !tc || !fn || !ln || !em || !password) {
+    if (!tn || !tc || !fn || !ln || !em) {
       setErrorMessage("Fill in all required fields.");
-      return;
-    }
-    if (!isPasswordValid(password)) {
-      setErrorMessage(PASSWORD_HINT);
-      return;
-    }
-    if (password !== confirmPassword) {
-      setErrorMessage("Passwords do not match.");
       return;
     }
     setErrorMessage(null);
@@ -77,7 +64,6 @@ export default function CreateAgencyModal({ open, onClose, onCreated }: Props) {
         firstName: fn,
         lastName: ln,
         email: em,
-        password,
       };
       if (un.length >= 3) body.username = un;
 
@@ -140,8 +126,8 @@ export default function CreateAgencyModal({ open, onClose, onCreated }: Props) {
                 <span className="font-medium">First administrator:</span> {success.user?.email ?? "—"}
               </p>
               <p className="text-xs text-teal-800 pt-2 border-t border-teal-200">
-                Share the tenant code and the password you set with the new administrator. Your current session is
-                unchanged.
+                A temporary password was generated and emailed to the administrator. Share the tenant code with them so
+                they can sign in and set a new password. Your current session is unchanged.
               </p>
             </div>
             <button
@@ -155,9 +141,8 @@ export default function CreateAgencyModal({ open, onClose, onCreated }: Props) {
         ) : (
           <form onSubmit={handleSubmit} className="p-4 overflow-y-auto flex flex-col gap-3 min-h-0">
             <p className="text-xs text-slate-600">
-              Provisions a new tenant and its first tenant administrator. Uses the same API as{" "}
-              <span className="font-mono">/register-organization</span>, but keeps you signed in to your current
-              organization.
+              Provisions a new tenant and its first tenant administrator. A temporary password is generated server-side
+              and sent to the administrator&apos;s email — you do not set a password here.
             </p>
             {errorMessage && (
               <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">{errorMessage}</div>
@@ -243,37 +228,7 @@ export default function CreateAgencyModal({ open, onClose, onCreated }: Props) {
                 autoComplete="email"
                 required
               />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1" htmlFor="ca-pw">
-                  Password
-                </label>
-                <input
-                  id="ca-pw"
-                  type="password"
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
-                  value={password}
-                  onChange={(ev) => setPassword(ev.target.value)}
-                  autoComplete="new-password"
-                  required
-                />
-                <p className="text-[11px] text-slate-500 mt-1">{PASSWORD_HINT}</p>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1" htmlFor="ca-pwc">
-                  Confirm
-                </label>
-                <input
-                  id="ca-pwc"
-                  type="password"
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
-                  value={confirmPassword}
-                  onChange={(ev) => setConfirmPassword(ev.target.value)}
-                  autoComplete="new-password"
-                  required
-                />
-              </div>
+              <p className="text-[11px] text-slate-500 mt-1">Welcome email with a temporary password is sent here.</p>
             </div>
             <label className="flex items-start gap-2 bg-slate-50 p-3 rounded-lg border border-slate-200 cursor-pointer text-xs text-slate-600">
               <input
@@ -300,7 +255,7 @@ export default function CreateAgencyModal({ open, onClose, onCreated }: Props) {
               </button>
               <button
                 type="submit"
-                disabled={!agreed || submitting || !isPasswordValid(password) || password !== confirmPassword}
+                disabled={!agreed || submitting}
                 className="flex-1 bg-primary text-white py-2.5 rounded-lg font-semibold hover:bg-primary-container disabled:opacity-50 disabled:pointer-events-none"
               >
                 {submitting ? "Creating…" : "Create agency"}
