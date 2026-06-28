@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import type { WorkflowGuideStep } from "@/components/CaseWorkflowGuidePanel";
 import { formatCaseUpdated } from "@/lib/casesApi";
 
@@ -42,25 +43,28 @@ type Props = {
   transitionRoleLabels: (ids?: string[]) => string[];
 };
 
-function progressTimingCaption(action: ProgressAvailableAction): string | null {
+function progressTimingCaption(
+  action: ProgressAvailableAction,
+  t: (key: string, opts?: Record<string, unknown>) => string,
+): string | null {
   const type = action.timeLimitType;
   const amt = action.timeLimitAmount;
   const unit = action.timeLimitUnit;
   if (!type || type === "NONE" || amt == null || amt < 1 || (unit !== "HOURS" && unit !== "DAYS")) return null;
-  const unitLabel = unit === "DAYS" ? "day(s)" : "hour(s)";
-  const label = type === "DEADLINE" ? "Deadline" : "Suggested target";
+  const unitLabel = unit === "DAYS" ? t("cases.detail.timing.dayUnit") : t("cases.detail.timing.hourUnit");
+  const label = type === "DEADLINE" ? t("modals.caseProgress.deadline") : t("modals.caseProgress.suggestedTarget");
   if (action.deadlineAt) {
     const when = new Date(action.deadlineAt);
     const overdue = action.isPastDue;
     const suffix =
       overdue && type === "DEADLINE"
-        ? " — exceeded; blocked."
+        ? t("cases.detail.timing.exceededBlocked")
         : overdue
-          ? " — exceeded (not enforced)."
+          ? t("cases.detail.timing.exceededGuidance")
           : "";
     return `${label}: ${when.toLocaleString()}${suffix}`;
   }
-  return `${label}: within ${amt} ${unitLabel} of step start`;
+  return t("cases.detail.timing.within", { label, amount: amt, unit: unitLabel });
 }
 
 export default function CaseTaskProgressView({
@@ -73,6 +77,7 @@ export default function CaseTaskProgressView({
   onExecuteAction,
   transitionRoleLabels,
 }: Props) {
+  const { t } = useTranslation();
   const steps = guide?.steps ?? [];
   const transitions = guide?.transitions ?? [];
 
@@ -147,9 +152,7 @@ export default function CaseTaskProgressView({
           />
         </div>
         <p className="text-[11px] text-slate-500 mt-2">
-          {caseClosed
-            ? "This case is closed; the bar shows full progress through the workflow steps."
-            : "The bar advances as steps are completed. Your current step counts a little toward progress until you transition away."}
+          {caseClosed ? t("modals.caseProgress.closedHint") : t("modals.caseProgress.openHint")}
         </p>
       </div>
 
@@ -206,14 +209,14 @@ export default function CaseTaskProgressView({
                         )}
                         {s.requiresAttachment && (
                           <span className="text-[10px] font-bold uppercase bg-sky-100 text-sky-900 px-1.5 py-0.5 rounded">
-                            Needs file
+                            {t("cases.detail.needsFile")}
                           </span>
                         )}
                       </div>
                       <p className="text-[11px] text-slate-600 mt-1">
-                        {s.phase === "completed" && "Finished — you have already moved past this step."}
-                        {s.phase === "current" && "In progress — complete requirements here, then pick a transition below."}
-                        {s.phase === "upcoming" && "Not started yet — unlocks when you reach this step in the workflow."}
+                        {s.phase === "completed" && t("modals.caseProgress.finished")}
+                        {s.phase === "current" && t("modals.caseProgress.inProgress")}
+                        {s.phase === "upcoming" && t("modals.caseProgress.upcoming")}
                       </p>
                       {branches > 1 && (
                         <p className="text-[11px] text-amber-800 mt-1.5 flex items-start gap-1">
@@ -265,15 +268,15 @@ export default function CaseTaskProgressView({
             ) : availableActions.length === 0 ? (
               <p className="text-sm text-secondary">
                 {currentStep?.isFinal
-                  ? "You are on a terminal step — no further transitions."
-                  : "No actions are available for your role at this step, or the case cannot advance here."}
+                  ? t("modals.caseProgress.terminal")
+                  : t("modals.caseProgress.noActions")}
               </p>
             ) : (
               <ul className="space-y-2">
                 {availableActions.map((action) => {
                   const restricted = Array.isArray(action.allowedRoleIds) && action.allowedRoleIds.length > 0;
                   const deadlineBlocked = action.timeLimitType === "DEADLINE" && Boolean(action.isPastDue);
-                  const timingLine = progressTimingCaption(action);
+                  const timingLine = progressTimingCaption(action, t);
                   return (
                     <li key={action.id}>
                       <button
@@ -287,7 +290,7 @@ export default function CaseTaskProgressView({
                           <span className="text-sm text-teal-800 block mt-0.5">→ {action.toStep.name}</span>
                         )}
                         {action.requiresComment && (
-                          <span className="text-[11px] text-slate-600 block mt-1">Comment required to confirm.</span>
+                          <span className="text-[11px] text-slate-600 block mt-1">Formal letter required.</span>
                         )}
                         {timingLine ? (
                           <span
@@ -327,7 +330,7 @@ export default function CaseTaskProgressView({
                 {pathChronological.map((row) => (
                   <li key={row.id} className="flex flex-col gap-0.5 border-l-2 border-teal-300 pl-3 py-1">
                     <span className="font-medium text-slate-800">
-                      {row.transition?.name ?? "Step change"}
+                      {row.transition?.name ?? t("modals.caseProgress.stepChange")}
                       {row.fromStep && row.toStep && (
                         <span className="font-normal text-slate-600">
                           {" "}

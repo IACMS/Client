@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ApiError, apiPost, apiPut } from "@/lib/api";
 import {
   fetchRbacRoles,
@@ -72,6 +73,7 @@ export default function WorkflowStepModal({
   editStep,
   onSaved,
 }: Props) {
+  const { t } = useTranslation();
   const [name, setName] = useState("");
   const [key, setKey] = useState("");
   const [keyManual, setKeyManual] = useState(false);
@@ -216,7 +218,7 @@ export default function WorkflowStepModal({
           <h2 id="wf-step-title" className="font-h3 text-primary">
             {editStep ? "Edit step" : "Add step"}
           </h2>
-          <button type="button" onClick={handleClose} className="p-1 rounded hover:bg-slate-100" aria-label="Close">
+          <button type="button" onClick={handleClose} className="p-1 rounded hover:bg-slate-100" aria-label={t("common.close")}>
             <span className="material-symbols-outlined">close</span>
           </button>
         </div>
@@ -251,7 +253,7 @@ export default function WorkflowStepModal({
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-600 mb-1" htmlFor="st-desc">
-              Description <span className="font-normal text-slate-400">(optional)</span>
+              {t("common.description")} <span className="font-normal text-slate-400">({t("common.optional")})</span>
             </label>
             <input
               id="st-desc"
@@ -337,14 +339,14 @@ export default function WorkflowStepModal({
               onClick={handleClose}
               className="flex-1 py-2.5 rounded-lg border border-slate-200 font-semibold text-slate-700 hover:bg-slate-50"
             >
-              Cancel
+              {t("common.cancel")}
             </button>
             <button
               type="submit"
               disabled={submitting}
               className="flex-1 bg-primary text-white py-2.5 rounded-lg font-semibold hover:bg-primary-container disabled:opacity-50"
             >
-              {submitting ? "Saving…" : editStep ? "Save step" : "Add step"}
+              {submitting ? t("modals.workflow.saving") : t("common.save")}
             </button>
           </div>
         </form>

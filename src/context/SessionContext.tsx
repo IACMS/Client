@@ -20,6 +20,10 @@ export type SessionTenant = {
     secondaryColor?: string;
     logoUrl?: string;
     fontPreference?: string;
+    letterHeader?: string;
+    letterFooter?: string;
+    letterAddress?: string;
+    letterClosing?: string;
   };
 };
 

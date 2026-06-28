@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { ApiError, apiDelete, apiPost } from "@/lib/api";
 import WorkflowStepModal, { type WorkflowStepEditPayload } from "@/components/WorkflowStepModal";
@@ -15,6 +16,7 @@ import { validateWorkflowForPublish } from "@/lib/workflowPublishValidate";
 import { useWorkflow, type WorkflowStep, type WorkflowTransition } from "@/hooks/useWorkflow";
 
 export default function WorkflowDesignerPage() {
+  const { t } = useTranslation();
   const { id } = useParams();
   const navigate = useNavigate();
   const { can } = usePermissions();
@@ -109,7 +111,7 @@ export default function WorkflowDesignerPage() {
       setDeleteTransition(null);
       await reload();
     } catch (err) {
-      setBannerError(err instanceof ApiError ? err.message : "Could not delete transition.");
+      setBannerError(err instanceof ApiError ? err.message : t("workflows.designer.deleteTransitionFailed"));
       setDeleteTransition(null);
     } finally {
       setDeleteTransitionBusy(false);
@@ -125,13 +127,13 @@ export default function WorkflowDesignerPage() {
       };
       const newId = res.workflow?.id;
       if (!newId) {
-        setBannerError("Could not create new version.");
+        setBannerError(t("workflows.designer.newVersionFailed"));
         return;
       }
       navigate(`/workflows/${encodeURIComponent(newId)}/designer`, { replace: true });
       void reload();
     } catch (err) {
-      setBannerError(err instanceof ApiError ? err.message : "Could not create new version.");
+      setBannerError(err instanceof ApiError ? err.message : t("workflows.designer.newVersionFailed"));
     }
   }
 
@@ -144,7 +146,7 @@ export default function WorkflowDesignerPage() {
       setDeleteDraftOpen(false);
       navigate("/workflows");
     } catch (err) {
-      setBannerError(err instanceof ApiError ? err.message : "Could not delete draft.");
+      setBannerError(err instanceof ApiError ? err.message : t("workflows.designer.deleteDraftFailed"));
       setDeleteDraftOpen(false);
     } finally {
       setDeleteDraftBusy(false);
@@ -159,10 +161,11 @@ export default function WorkflowDesignerPage() {
       setBannerError(blocking.join(" "));
       return;
     }
-    const base =
-      "Once published, this workflow definition can no longer be edited. Older published versions of the same key are archived; existing cases stay on the workflow version they were created with.";
+    const base = t("workflows.designer.publishMessage");
     const warnText =
-      warnings.length > 0 ? `\n\nWarnings:\n${warnings.map((w) => `• ${w}`).join("\n")}` : "";
+      warnings.length > 0
+        ? `\n\n${t("workflows.designer.publishWarnings")}\n${warnings.map((w) => `• ${w}`).join("\n")}`
+        : "";
     setPublishMessage(base + warnText);
     setPublishOpen(true);
   }
@@ -181,7 +184,7 @@ export default function WorkflowDesignerPage() {
           ? err.message
           : err instanceof Error
             ? err.message
-            : "Publish failed. Ensure you have exactly one initial step.";
+            : t("workflows.designer.publishFailed");
       setBannerError(msg);
       setPublishOpen(false);
     } finally {
@@ -199,28 +202,28 @@ export default function WorkflowDesignerPage() {
   if (loadState === "forbidden") {
     return (
       <ForbiddenView
-        resource="this workflow"
+        resourceKey="workflows.designer.forbiddenResource"
         detail={loadError ?? undefined}
         backTo="/workflows"
-        backLabel="Back to workflows"
+        backLabelKey="workflows.designer.backLabel"
       />
     );
   }
   if (loadState === "error" || !workflow) {
     return (
       <div className="p-12 max-w-lg mx-auto text-center space-y-4">
-        <p className="text-red-600 font-semibold">Could not load this workflow</p>
+        <p className="text-red-600 font-semibold">{t("workflows.designer.loadFailedTitle")}</p>
         {loadError && (
           <p className="text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded-lg p-4 text-left whitespace-pre-wrap">
             {loadError}
           </p>
         )}
         <p className="text-xs text-slate-500">
-          If the message mentions a missing column or database error, apply pending migrations from the IACMS repo:{" "}
+          {t("workflows.designer.migrationHint")}{" "}
           <code className="font-mono bg-slate-100 px-1 rounded">npx prisma migrate deploy</code>
         </p>
         <Link to="/workflows" className="inline-block text-primary font-semibold hover:underline">
-          ← Back to workflows
+          {t("workflows.designer.backToWorkflows")}
         </Link>
       </div>
     );
@@ -267,9 +270,9 @@ export default function WorkflowDesignerPage() {
       )}
       <ConfirmDialog
         open={publishOpen}
-        title="Publish workflow?"
+        title={t("workflows.designer.publishTitle")}
         message={publishMessage}
-        confirmLabel="Publish"
+        confirmLabel={t("workflows.designer.publish")}
         variant="primary"
         busy={publishBusy}
         onCancel={() => !publishBusy && setPublishOpen(false)}
@@ -277,9 +280,9 @@ export default function WorkflowDesignerPage() {
       />
       <ConfirmDialog
         open={deleteDraftOpen}
-        title="Delete this draft?"
-        message="This removes the draft workflow only if no cases use it. You can create a new version again from a published copy."
-        confirmLabel="Delete draft"
+        title={t("workflows.designer.deleteDraftTitle")}
+        message={t("workflows.designer.deleteDraftMessage")}
+        confirmLabel={t("workflows.designer.deleteDraft")}
         variant="danger"
         busy={deleteDraftBusy}
         onCancel={() => !deleteDraftBusy && setDeleteDraftOpen(false)}
@@ -287,13 +290,13 @@ export default function WorkflowDesignerPage() {
       />
       <ConfirmDialog
         open={!!deleteTransition}
-        title="Delete this transition?"
+        title={t("workflows.designer.deleteTransitionTitle")}
         message={
           deleteTransition
-            ? `Remove transition "${deleteTransition.name}". This cannot be undone once published versions reference it.`
+            ? t("workflows.designer.deleteTransitionMessage", { name: deleteTransition.name })
             : ""
         }
-        confirmLabel="Delete"
+        confirmLabel={t("workflows.designer.delete")}
         variant="danger"
         busy={deleteTransitionBusy}
         onCancel={() => !deleteTransitionBusy && setDeleteTransition(null)}
@@ -311,8 +314,8 @@ export default function WorkflowDesignerPage() {
 
       {!canConfigure && (
         <div className="shrink-0 mx-4 mt-3 p-3 rounded-lg bg-slate-100 border border-slate-200 text-slate-700 text-sm">
-          <span className="font-semibold">Read-only view.</span> You can explore steps and transitions; only workflow editors
-          can change or publish definitions.
+          <span className="font-semibold">{t("workflows.designer.readOnlyBanner")}</span>{" "}
+          {t("workflows.designer.readOnlyBody")}
         </div>
       )}
 
@@ -320,7 +323,7 @@ export default function WorkflowDesignerPage() {
         <div className="shrink-0 mx-4 mt-3 p-3 rounded-lg bg-red-50 border border-red-200 text-red-800 text-sm flex justify-between gap-3 items-start">
           <span>{bannerError}</span>
           <button type="button" className="text-red-900 font-semibold shrink-0" onClick={() => setBannerError(null)}>
-            Dismiss
+            {t("common.dismiss")}
           </button>
         </div>
       )}

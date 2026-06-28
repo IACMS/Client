@@ -1,4 +1,5 @@
 import { FormEvent, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { StubNavItem } from "@/components/StubNavItem";
 import { ApiError, apiPost } from "@/lib/api";
 
@@ -16,6 +17,7 @@ type RegisterResponse = {
 };
 
 export default function CreateAgencyModal({ open, onClose, onCreated }: Props) {
+  const { t } = useTranslation();
   const [agreed, setAgreed] = useState(false);
   const [tenantName, setTenantName] = useState("");
   const [tenantCode, setTenantCode] = useState("");
@@ -104,9 +106,9 @@ export default function CreateAgencyModal({ open, onClose, onCreated }: Props) {
             <span className="material-symbols-outlined" aria-hidden>
               add_business
             </span>
-            Register new agency
+            {t("agencies.registerNew")}
           </h2>
-          <button type="button" onClick={resetAndClose} className="p-1 rounded hover:bg-slate-100" aria-label="Close">
+          <button type="button" onClick={resetAndClose} className="p-1 rounded hover:bg-slate-100" aria-label={t("common.close")}>
             <span className="material-symbols-outlined">close</span>
           </button>
         </div>
@@ -149,7 +151,7 @@ export default function CreateAgencyModal({ open, onClose, onCreated }: Props) {
             )}
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1" htmlFor="ca-org">
-                Organization name
+                {t("common.name")}
               </label>
               <input
                 id="ca-org"
@@ -162,7 +164,7 @@ export default function CreateAgencyModal({ open, onClose, onCreated }: Props) {
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1" htmlFor="ca-code">
-                Tenant code
+                {t("common.tenant")}
               </label>
               <input
                 id="ca-code"
@@ -204,7 +206,7 @@ export default function CreateAgencyModal({ open, onClose, onCreated }: Props) {
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1" htmlFor="ca-un">
-                Username (optional)
+                Username ({t("common.optional")})
               </label>
               <input
                 id="ca-un"
@@ -217,7 +219,7 @@ export default function CreateAgencyModal({ open, onClose, onCreated }: Props) {
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1" htmlFor="ca-em">
-                Administrator email
+                {t("common.email")}
               </label>
               <input
                 id="ca-em"
@@ -251,14 +253,14 @@ export default function CreateAgencyModal({ open, onClose, onCreated }: Props) {
                 onClick={resetAndClose}
                 className="flex-1 py-2.5 rounded-lg border border-slate-200 font-semibold text-slate-700 hover:bg-slate-50"
               >
-                Cancel
+                {t("common.cancel")}
               </button>
               <button
                 type="submit"
                 disabled={!agreed || submitting}
                 className="flex-1 bg-primary text-white py-2.5 rounded-lg font-semibold hover:bg-primary-container disabled:opacity-50 disabled:pointer-events-none"
               >
-                {submitting ? "Creating…" : "Create agency"}
+                {submitting ? t("modals.workflow.creating") : t("agencies.registerNew")}
               </button>
             </div>
           </form>

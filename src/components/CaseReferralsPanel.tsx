@@ -1,20 +1,25 @@
 import { FormEvent, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ApiError, apiGet, apiPost } from "@/lib/api";
+import ReferralActions from "@/components/ReferralActions";
+import { type ApiReferral, referralStatusClass } from "@/lib/referralsApi";
 
-type TenantMini = { id?: string; name?: string; code?: string };
+export type { ApiReferral };
 
-export type ApiReferral = {
-  id: string;
+function ReferralsList({
+  caseId,
+  version,
+  actorTenantId,
+  userId,
+  onRefresh,
+}: {
   caseId: string;
-  status: string;
-  referralReason?: string | null;
-  notes?: string | null;
-  fromTenant?: TenantMini;
-  toTenant?: TenantMini;
-  referredAt?: string;
-};
-
-function ReferralsList({ caseId, version }: { caseId: string; version: number }) {
+  version: number;
+  actorTenantId: string;
+  userId: string;
+  onRefresh: () => void;
+}) {
+  const { t } = useTranslation();
   const [rows, setRows] = useState<ApiReferral[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -30,7 +35,7 @@ function ReferralsList({ caseId, version }: { caseId: string; version: number })
         if (!cancelled) setRows(Array.isArray(data.referrals) ? data.referrals : []);
       } catch (e) {
         if (!cancelled)
-          setErr(e instanceof ApiError ? e.message : "Could not load referrals.");
+          setErr(e instanceof ApiError ? e.message : t("modals.referral.loadFailed"));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -44,7 +49,7 @@ function ReferralsList({ caseId, version }: { caseId: string; version: number })
     return (
       <p className="text-sm text-slate-500 flex items-center gap-2">
         <span className="material-symbols-outlined text-lg animate-pulse">progress_activity</span>
-        Loading referrals…
+        {t("common.loading")}
       </p>
     );
   }
@@ -52,20 +57,32 @@ function ReferralsList({ caseId, version }: { caseId: string; version: number })
     return <p className="text-sm text-red-700">{err}</p>;
   }
   if (rows.length === 0) {
-    return <p className="text-sm text-slate-600">No referrals for this case yet.</p>;
+    return <p className="text-sm text-slate-600">{t("modals.referral.noReferrals")}</p>;
   }
   return (
     <ul className="divide-y divide-slate-200 border border-slate-200 rounded-lg overflow-hidden bg-white">
       {rows.map((r) => (
         <li key={r.id} className="p-4 text-sm">
-          <div className="flex flex-wrap justify-between gap-2">
+          <div className="flex flex-wrap justify-between gap-2 items-start">
             <span className="font-semibold text-slate-800">
               {r.fromTenant?.code ?? "—"} → {r.toTenant?.code ?? "—"}
             </span>
-            <span className="text-xs uppercase font-bold text-teal-700">{r.status}</span>
+            <span
+              className={`text-xs uppercase font-bold px-2 py-0.5 rounded ${referralStatusClass(r.status)}`}
+            >
+              {r.status}
+            </span>
           </div>
           {r.referralReason && <p className="text-slate-600 mt-2">{r.referralReason}</p>}
-          <p className="text-xs text-slate-400 mt-1 font-mono">{r.id}</p>
+          <div className="mt-3">
+            <ReferralActions
+              referral={r}
+              actorTenantId={actorTenantId}
+              userId={userId}
+              layout="stack"
+              onUpdated={onRefresh}
+            />
+          </div>
         </li>
       ))}
     </ul>
@@ -84,6 +101,7 @@ export default function CaseReferralsPanel({
   /** When false, hide the "create referral" form and only render the read-only list. */
   canCreate?: boolean;
 }) {
+  const { t } = useTranslation();
   const [partnerCode, setPartnerCode] = useState("");
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -94,7 +112,7 @@ export default function CaseReferralsPanel({
     e.preventDefault();
     const code = partnerCode.trim().toUpperCase();
     if (!code) {
-      setMsg("Partner tenant code is required.");
+      setMsg(t("modals.referral.partnerRequired"));
       return;
     }
     setMsg(null);
@@ -106,12 +124,12 @@ export default function CaseReferralsPanel({
       };
       const toTenantId = v.tenant?.id;
       if (!v.valid || !toTenantId) {
-        setMsg("Unknown or inactive tenant code.");
+        setMsg(t("modals.referral.unknownTenant"));
         setSubmitting(false);
         return;
       }
       if (toTenantId === fromTenantId) {
-        setMsg("Partner tenant must differ from your own.");
+        setMsg(t("modals.referral.partnerMustDiffer"));
         setSubmitting(false);
         return;
       }
@@ -125,9 +143,9 @@ export default function CaseReferralsPanel({
       setPartnerCode("");
       setReason("");
       setListVersion((x) => x + 1);
-      setMsg("Referral created.");
+      setMsg(t("modals.referral.created"));
     } catch (err) {
-      setMsg(err instanceof ApiError ? err.message : "Could not create referral.");
+      setMsg(err instanceof ApiError ? err.message : t("modals.referral.createFailed"));
     } finally {
       setSubmitting(false);
     }
@@ -156,7 +174,7 @@ export default function CaseReferralsPanel({
         )}
         <div>
           <label className="block text-xs font-semibold text-slate-600 mb-1" htmlFor="ref-code">
-            Partner tenant code
+            {t("modals.referral.partnerCode")}
           </label>
           <input
             id="ref-code"
@@ -168,7 +186,7 @@ export default function CaseReferralsPanel({
         </div>
         <div>
           <label className="block text-xs font-semibold text-slate-600 mb-1" htmlFor="ref-reason">
-            Reason (optional)
+            {t("common.description")} ({t("common.optional")})
           </label>
           <textarea
             id="ref-reason"
@@ -182,13 +200,19 @@ export default function CaseReferralsPanel({
           disabled={submitting}
           className="bg-primary-container text-white text-sm font-semibold px-4 py-2 rounded-lg disabled:opacity-50"
         >
-          {submitting ? "Submitting…" : "Create referral"}
+          {submitting ? t("modals.referral.submitting") : t("modals.referral.newReferral")}
         </button>
       </form>
       )}
       <div>
         <h4 className="font-label-caps text-slate-500 mb-2">Existing referrals</h4>
-        <ReferralsList caseId={caseId} version={listVersion} />
+        <ReferralsList
+          caseId={caseId}
+          version={listVersion}
+          actorTenantId={fromTenantId}
+          userId={userId}
+          onRefresh={() => setListVersion((x) => x + 1)}
+        />
       </div>
     </div>
   );

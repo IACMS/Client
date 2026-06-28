@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { apiPost, ApiError } from "@/lib/api";
 import { fetchRbacRoles, type RbacRoleRow } from "@/lib/workflowRoles";
 import { useSession } from "@/context/SessionContext";
@@ -10,6 +11,7 @@ type CreateUserModalProps = {
 };
 
 export default function CreateUserModal({ isOpen, onClose, onSuccess }: CreateUserModalProps) {
+  const { t } = useTranslation();
   const { user, status } = useSession();
   const tenantId = user?.tenant?.id ?? user?.tenantId ?? "";
   const tenantLabel =
@@ -90,8 +92,8 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess }: CreateUs
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
         <div className="p-6 border-b border-outline-variant flex justify-between items-center bg-surface-container-lowest">
-          <h2 className="font-h2 text-primary">Invite user</h2>
-          <button type="button" onClick={onClose} className="text-secondary hover:text-primary transition-colors">
+          <h2 className="font-h2 text-primary">{t("modals.users.inviteTitle")}</h2>
+          <button type="button" onClick={onClose} className="text-secondary hover:text-primary transition-colors" aria-label={t("common.close")}>
             <span className="material-symbols-outlined">close</span>
           </button>
         </div>
@@ -103,7 +105,7 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess }: CreateUs
           </p>
 
           {!sessionReady && (
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-700 text-sm">Loading session…</div>
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-slate-700 text-sm">{t("common.loading")}</div>
           )}
           {sessionReady && !tenantId && (
             <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-900 text-sm">
@@ -155,8 +157,8 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess }: CreateUs
           </div>
 
           <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-1" htmlFor="invite-email">
-              Work email
+              <label className="block text-sm font-semibold text-slate-700 mb-1" htmlFor="invite-email">
+              {t("modals.users.email")}
             </label>
             <input
               id="invite-email"
@@ -172,7 +174,7 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess }: CreateUs
 
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-1" htmlFor="invite-user">
-              Username <span className="font-normal text-slate-400">(optional)</span>
+              Username <span className="font-normal text-slate-400">({t("common.optional")})</span>
             </label>
             <input
               id="invite-user"
@@ -188,7 +190,7 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess }: CreateUs
 
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-1" htmlFor="invite-role">
-              Role
+              {t("modals.users.role")}
             </label>
             <select
               id="invite-role"
@@ -218,7 +220,7 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess }: CreateUs
               disabled={loading}
               className="px-5 py-2 rounded-lg font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
             >
-              Cancel
+              {t("common.cancel")}
             </button>
             <button
               type="submit"
@@ -230,7 +232,7 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess }: CreateUs
               ) : (
                 <span className="material-symbols-outlined text-[20px]">send</span>
               )}
-              Send invite
+              {loading ? t("modals.users.inviting") : t("modals.users.invite")}
             </button>
           </div>
         </form>

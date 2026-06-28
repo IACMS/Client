@@ -1,5 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { StubNavItem } from "@/components/StubNavItem";
 import { useSession } from "@/context/SessionContext";
 import { ApiError, apiPost, persistAuthTokensFromResponse } from "@/lib/api";
@@ -8,6 +10,7 @@ const BRAND_PATTERN =
   "https://lh3.googleusercontent.com/aida-public/AB6AXuAeQWu8uDOUDIBHFNGG48Xom1xvOzeaOko60cXFxqIuh3JS2xFCfWvxOycITRH7rZNYZXQq__PiVZJzmC7x7LwQyGArEA_7lgNdjhuWlTCUnybY4OE1vONGiFUkIql0pZgPjlMUrgIer44X2gJXP2iVVxU-p9tiWWlehWiAiEqbIDEc2b_oL5UJDAlscBl4E1Qstm-IgydRdmZTSPQHTxUy6Nn4KII14nDqsVI5_PcybX2255Is17ZCOAokJneVoYHp8L3KD8k-zFE";
 
 export default function LoginPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
   const { refresh, user, status } = useSession();
@@ -57,12 +60,16 @@ export default function LoginPage() {
           ? err.message
           : err instanceof Error
             ? err.message
-            : "Sign-in failed. Try again.";
-      setErrorMessage(
+            : t("auth.signInFailed");
+      const friendly =
         message.includes("fetch") || message === "Failed to fetch"
-          ? "Cannot reach the API gateway. Start IACMS (e.g. api-gateway on port 3000) and check VITE_API_URL."
-          : message,
-      );
+          ? t("auth.apiUnreachable")
+          : message.includes("POLICY_UNAVAILABLE") || message.includes("Authorization service")
+            ? t("auth.rbacUnavailable")
+            : message.includes("Authentication service is unavailable") || message.includes("SERVICE_UNAVAILABLE")
+              ? t("auth.authUnavailable")
+              : message;
+      setErrorMessage(friendly);
       setAuthError(true);
     } finally {
       setSubmitting(false);
@@ -75,13 +82,16 @@ export default function LoginPage() {
         <span className="material-symbols-outlined text-4xl text-primary-container animate-pulse" aria-hidden>
           progress_activity
         </span>
-        <p className="text-sm text-on-surface-variant mt-4">Loading…</p>
+        <p className="text-sm text-on-surface-variant mt-4">{t("common.loading")}</p>
       </div>
     );
   }
 
   return (
     <div className="font-body-md text-on-surface min-h-dvh flex flex-col overflow-x-hidden overflow-y-auto">
+      <div className="absolute top-4 right-4 z-10">
+        <LanguageSwitcher />
+      </div>
       <main className="flex-1 flex flex-col justify-center items-center px-4 sm:px-6 min-h-0 py-8 sm:py-12 lg:py-16 w-full">
         <div className="w-full max-w-[440px] sm:max-w-[460px] shrink-0 flex flex-col items-center">
           <div className="text-center mb-6 sm:mb-8 w-full">
@@ -91,26 +101,26 @@ export default function LoginPage() {
               </h1>
             </Link>
             <p className="font-body-sm text-body-sm text-secondary mt-2 px-2">
-              Inter-Agency Case Management System
+              {t("auth.brandSubtitle")}
             </p>
           </div>
           <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-6 sm:p-8 shadow-sm w-full">
             <header className="mb-5 sm:mb-6 border-b border-surface-variant pb-4">
-              <h2 className="font-h3 text-xl sm:text-2xl text-on-surface">Agency Secure Access</h2>
+              <h2 className="font-h3 text-xl sm:text-2xl text-on-surface">{t("auth.secureAccessTitle")}</h2>
               <p className="font-body-sm text-sm text-on-surface-variant mt-2 leading-relaxed">
-                Authorized personnel only. Please verify your tenant credentials.
+                {t("auth.secureAccessIntro")}
               </p>
             </header>
             <form className="space-y-4 sm:space-y-5" onSubmit={handleSubmit}>
               <div className="space-y-2">
                 <label className="font-label-caps text-label-caps text-on-surface-variant uppercase text-xs tracking-wide" htmlFor="tenant_code">
-                  Tenant Code
+                  {t("auth.tenantCode")}
                 </label>
                 <div className="relative">
                   <input
                     className="w-full px-3.5 py-3 text-sm bg-white border border-outline rounded-lg focus:ring-2 focus:ring-primary-container/20 focus:border-primary-container transition-all placeholder:text-outline-variant"
                     id="tenant_code"
-                    placeholder="e.g., TEST-ORG"
+                    placeholder={t("auth.tenantCodePlaceholder")}
                     type="text"
                     value={tenantCode}
                     onChange={(ev) => {
@@ -126,13 +136,13 @@ export default function LoginPage() {
               </div>
               <div className="space-y-2">
                 <label className="font-label-caps text-label-caps text-on-surface-variant uppercase text-xs tracking-wide" htmlFor="email">
-                  Email Address
+                  {t("auth.email")}
                 </label>
                 <div className="relative">
                   <input
                     className="w-full px-3.5 py-3 text-sm bg-white border border-outline rounded-lg focus:ring-2 focus:ring-primary-container/20 focus:border-primary-container transition-all placeholder:text-outline-variant"
                     id="email"
-                    placeholder="government.id@agency.gov"
+                    placeholder={t("auth.emailPlaceholder")}
                     type="email"
                     value={email}
                     onChange={(ev) => {
@@ -149,13 +159,13 @@ export default function LoginPage() {
               <div className="space-y-2">
                 <div className="flex justify-between items-center gap-2">
                   <label className="font-label-caps text-label-caps text-on-surface-variant uppercase text-xs tracking-wide" htmlFor="password">
-                    Password
+                    {t("auth.password")}
                   </label>
                   <Link
                     to="/forgot-password"
                     className="text-sm text-primary-container font-semibold hover:underline shrink-0"
                   >
-                    Forgot Password?
+                    {t("auth.forgotPassword")}
                   </Link>
                 </div>
                 <div className="relative">
@@ -181,7 +191,7 @@ export default function LoginPage() {
                       className={`material-symbols-outlined text-md cursor-pointer bg-transparent border-0 p-0 ${
                         authError ? "text-error" : "text-outline-variant"
                       }`}
-                      aria-label={showPassword ? "Hide password" : "Show password"}
+                      aria-label={showPassword ? t("auth.hidePassword") : t("auth.showPassword")}
                       onClick={() => setShowPassword((v) => !v)}
                     >
                       {showPassword ? "visibility" : "visibility_off"}
@@ -191,8 +201,7 @@ export default function LoginPage() {
                 {authError && (
                   <p className="text-sm text-error flex items-start gap-2 leading-relaxed mt-1">
                     <span className="material-symbols-outlined text-sm shrink-0">error</span>
-                    {errorMessage ??
-                      "Enter tenant code, email, and password. Use credentials from your IACMS seed (see backend README)."}
+                    {errorMessage ?? t("auth.credentialsHint")}
                   </p>
                 )}
               </div>
@@ -201,34 +210,34 @@ export default function LoginPage() {
                 type="submit"
                 disabled={submitting}
               >
-                {submitting ? "Signing in…" : "Sign In"}
+                {submitting ? t("auth.signingIn") : t("auth.signIn")}
                 <span className="material-symbols-outlined">arrow_forward</span>
               </button>
             </form>
             <div className="mt-6 sm:mt-7 pt-5 border-t border-surface-variant flex flex-col items-center gap-3 text-center">
-              <p className="text-sm text-on-surface-variant">Don&apos;t have agency access yet?</p>
+              <p className="text-sm text-on-surface-variant">{t("auth.noAccess")}</p>
               <Link
                 to="/register"
                 className="text-base font-bold text-primary-container border-2 border-primary-container/20 px-8 py-2.5 rounded-full hover:bg-primary-container/5 transition-colors"
               >
-                Request Agency Access
+                {t("auth.requestAccess")}
               </Link>
               <Link to="/register-organization" className="text-sm font-semibold text-primary hover:underline">
-                Create a new organization
+                {t("auth.createOrganization")}
               </Link>
             </div>
           </div>
           <footer className="text-center mt-8 sm:mt-10 w-full max-w-[460px] px-2 pb-4 sm:pb-6">
             <p className="text-xs sm:text-sm text-on-surface-variant leading-relaxed max-w-md mx-auto">
-              © 2024 Government Case Management System. Official Use Only. Unauthorized access is subject to prosecution.
+              {t("auth.footerNotice")}
             </p>
             <div className="flex justify-center gap-md mt-4 flex-wrap items-center">
               <StubNavItem className="font-label-caps text-label-caps text-on-surface-variant uppercase">
-                Privacy Policy
+                {t("common.privacyPolicy")}
               </StubNavItem>
               <span className="text-outline-variant">•</span>
               <StubNavItem className="font-label-caps text-label-caps text-on-surface-variant uppercase">
-                Accessibility
+                {t("common.accessibility")}
               </StubNavItem>
             </div>
           </footer>

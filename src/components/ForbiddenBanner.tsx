@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { useSession } from "@/context/SessionContext";
 
 /**
@@ -6,6 +7,7 @@ import { useSession } from "@/context/SessionContext";
  * Auto-dismisses after a short delay; can also be dismissed manually.
  */
 export default function ForbiddenBanner() {
+  const { t } = useTranslation();
   const { forbiddenMessage, clearForbiddenMessage } = useSession();
 
   useEffect(() => {
@@ -25,14 +27,14 @@ export default function ForbiddenBanner() {
         block
       </span>
       <div className="flex-1 min-w-0">
-        <p className="font-semibold text-sm">Permission denied</p>
+        <p className="font-semibold text-sm">{t("errors.permissionDenied")}</p>
         <p className="text-xs mt-0.5">{forbiddenMessage}</p>
       </div>
       <button
         type="button"
         onClick={clearForbiddenMessage}
         className="text-amber-900 hover:bg-amber-100 rounded p-1 shrink-0"
-        aria-label="Dismiss"
+        aria-label={t("common.dismiss")}
       >
         <span className="material-symbols-outlined text-[18px]">close</span>
       </button>

@@ -1,9 +1,11 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
 import PasswordInput from "@/components/PasswordInput";
 import { useSession } from "@/context/SessionContext";
 import { ApiError, apiGet, apiPatch, apiPost } from "@/lib/api";
-import { PASSWORD_HINT, isPasswordValid } from "@/lib/passwordRules";
+import { getPasswordHint, isPasswordValid } from "@/lib/passwordRules";
 
 type ProfileUser = {
   id: string;
@@ -17,6 +19,7 @@ type ProfileUser = {
 };
 
 export default function SettingsPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
   const { user: sessionUser, refresh: refreshSession } = useSession();
@@ -31,12 +34,14 @@ export default function SettingsPage() {
   const [phone, setPhone] = useState("");
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileSaved, setProfileSaved] = useState<string | null>(null);
+  const [profileSavedOk, setProfileSavedOk] = useState(true);
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [pwdSaving, setPwdSaving] = useState(false);
   const [pwdMessage, setPwdMessage] = useState<string | null>(null);
+  const [pwdMessageOk, setPwdMessageOk] = useState(true);
 
   useEffect(() => {
     if (mustChangeFirst) {
@@ -60,7 +65,7 @@ export default function SettingsPage() {
         setPhone(u.phone ?? "");
       } catch (err) {
         if (!cancelled) {
-          setProfileError(err instanceof ApiError ? err.message : "Could not load profile.");
+          setProfileError(err instanceof ApiError ? err.message : t("settings.loadFailed"));
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -83,14 +88,17 @@ export default function SettingsPage() {
       const prev = profile?.phone ?? "";
       if (pTrim !== prev) body.phone = pTrim || null;
       if (Object.keys(body).length === 0) {
-        setProfileSaved("No changes to save.");
+        setProfileSavedOk(true);
+        setProfileSaved(t("settings.noChanges"));
         return;
       }
       await apiPatch("/api/v1/auth/profile", body);
       await refreshSession();
-      setProfileSaved("Profile updated.");
+      setProfileSavedOk(true);
+      setProfileSaved(t("settings.profileUpdated"));
     } catch (err) {
-      setProfileSaved(err instanceof ApiError ? err.message : "Update failed.");
+      setProfileSavedOk(false);
+      setProfileSaved(err instanceof ApiError ? err.message : t("settings.updateFailed"));
     } finally {
       setProfileSaving(false);
     }
@@ -100,11 +108,12 @@ export default function SettingsPage() {
     e.preventDefault();
     setPwdMessage(null);
     if (!isPasswordValid(newPassword)) {
-      setPwdMessage(PASSWORD_HINT);
+      setPwdMessage(getPasswordHint());
       return;
     }
     if (newPassword !== confirmPassword) {
-      setPwdMessage("New passwords do not match.");
+      setPwdMessageOk(false);
+      setPwdMessage(t("settings.passwordMismatch"));
       return;
     }
     setPwdSaving(true);
@@ -120,14 +129,16 @@ export default function SettingsPage() {
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
-      setPwdMessage("Password changed.");
+      setPwdMessageOk(true);
+      setPwdMessage(t("settings.passwordChanged"));
       await refreshSession();
       if (wasForced) {
         const dest = from && from !== "/settings" && !from.startsWith("/settings/") ? from : "/dashboard";
         navigate(dest, { replace: true });
       }
     } catch (err) {
-      setPwdMessage(err instanceof ApiError ? err.message : "Could not change password.");
+      setPwdMessageOk(false);
+      setPwdMessage(err instanceof ApiError ? err.message : t("settings.passwordChangeFailed"));
     } finally {
       setPwdSaving(false);
     }
@@ -148,7 +159,7 @@ export default function SettingsPage() {
           {!firstLogin ? (
             <PasswordInput
               id="cur"
-              label="Current password"
+              label={t("settings.currentPassword")}
               value={currentPassword}
               onChange={setCurrentPassword}
               autoComplete="current-password"
@@ -157,30 +168,30 @@ export default function SettingsPage() {
           ) : null}
           <PasswordInput
             id="np"
-            label={firstLogin ? "New password" : "New password"}
+            label={t("settings.newPassword")}
             value={newPassword}
             onChange={setNewPassword}
             autoComplete="new-password"
             required
-            hint={PASSWORD_HINT}
+            hint={getPasswordHint()}
           />
           <PasswordInput
             id="cp"
-            label="Confirm new password"
+            label={t("settings.confirmPassword")}
             value={confirmPassword}
             onChange={setConfirmPassword}
             autoComplete="new-password"
             required
           />
           {pwdMessage && (
-            <p className={`text-sm ${pwdMessage.includes("changed.") ? "text-teal-800" : "text-red-700"}`}>{pwdMessage}</p>
+            <p className={`text-sm ${pwdMessageOk ? "text-teal-800" : "text-red-700"}`}>{pwdMessage}</p>
           )}
           <button
             type="submit"
             disabled={pwdSaving || !canSubmit}
             className="bg-slate-800 text-white text-sm font-semibold px-4 py-2 rounded-lg disabled:opacity-50"
           >
-            {pwdSaving ? "Updating…" : firstLogin ? "Set password and continue" : "Update password"}
+            {pwdSaving ? t("settings.updating") : firstLogin ? t("settings.setPasswordContinue") : t("settings.updatePassword")}
           </button>
         </form>
       </section>
@@ -191,11 +202,8 @@ export default function SettingsPage() {
     return (
       <div className="p-gutter max-w-2xl space-y-6 pb-12">
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-amber-950">
-          <h1 className="font-h2 text-primary mb-2">Set a new password</h1>
-          <p className="text-sm text-amber-900">
-            Your account was created with a temporary password (sent by email). Choose a new password below — you do not
-            need to enter the temporary password.
-          </p>
+          <h1 className="font-h2 text-primary mb-2">{t("settings.forcedTitle")}</h1>
+          <p className="text-sm text-amber-900">{t("settings.forcedIntro")}</p>
           <p className="text-sm text-slate-700 mt-2 font-mono">
             {sessionUser?.email}
             {sessionUser?.tenant?.code ? (
@@ -207,7 +215,7 @@ export default function SettingsPage() {
           </p>
         </div>
         {passwordFormSection({
-          heading: "Set your password",
+          heading: t("settings.setPassword"),
           firstLogin: true,
         })}
       </div>
@@ -218,7 +226,7 @@ export default function SettingsPage() {
     return (
       <div className="p-gutter flex items-center gap-2 text-slate-600">
         <span className="material-symbols-outlined animate-pulse">progress_activity</span>
-        Loading profile…
+        {t("settings.loadingProfile")}
       </div>
     );
   }
@@ -226,9 +234,9 @@ export default function SettingsPage() {
   if (profileError || !profile) {
     return (
       <div className="p-gutter max-w-xl">
-        <p className="text-red-700 text-sm mb-4">{profileError ?? "No profile."}</p>
+        <p className="text-red-700 text-sm mb-4">{profileError ?? t("settings.noProfile")}</p>
         <Link to="/dashboard" className="text-primary font-semibold text-sm hover:underline">
-          Back to dashboard
+          {t("settings.backToDashboard")}
         </Link>
       </div>
     );
@@ -237,7 +245,7 @@ export default function SettingsPage() {
   return (
     <div className="p-gutter max-w-2xl space-y-8 pb-12">
       <div>
-        <h1 className="font-h2 text-primary">Account settings</h1>
+        <h1 className="font-h2 text-primary">{t("settings.title")}</h1>
         <p className="text-sm text-slate-600 mt-1">
           {profile.email}
           {profile.tenant?.code ? (
@@ -250,12 +258,18 @@ export default function SettingsPage() {
       </div>
 
       <section className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
-        <h2 className="font-h3 text-teal-900 mb-4">Profile</h2>
+        <h2 className="font-h3 text-teal-900 mb-2">{t("settings.languageSection")}</h2>
+        <p className="text-sm text-slate-600 mb-4">{t("settings.languageHint")}</p>
+        <LanguageSwitcher variant="full" className="max-w-md" />
+      </section>
+
+      <section className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+        <h2 className="font-h3 text-teal-900 mb-4">{t("settings.profile")}</h2>
         <form className="space-y-4" onSubmit={saveProfile}>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-label-caps text-slate-500 mb-1 uppercase" htmlFor="fn">
-                First name
+                {t("settings.firstName")}
               </label>
               <input
                 id="fn"
@@ -266,7 +280,7 @@ export default function SettingsPage() {
             </div>
             <div>
               <label className="block text-xs font-label-caps text-slate-500 mb-1 uppercase" htmlFor="ln">
-                Last name
+                {t("settings.lastName")}
               </label>
               <input
                 id="ln"
@@ -278,34 +292,30 @@ export default function SettingsPage() {
           </div>
           <div>
             <label className="block text-xs font-label-caps text-slate-500 mb-1 uppercase" htmlFor="ph">
-              Phone
+              {t("settings.phone")}
             </label>
             <input
               id="ph"
               className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              placeholder="Optional"
+              placeholder={t("common.optional")}
             />
           </div>
           {profileSaved && (
-            <p
-              className={`text-sm ${profileSaved.includes("No changes") || profileSaved.includes("updated.") ? "text-teal-800" : "text-red-700"}`}
-            >
-              {profileSaved}
-            </p>
+            <p className={`text-sm ${profileSavedOk ? "text-teal-800" : "text-red-700"}`}>{profileSaved}</p>
           )}
           <button
             type="submit"
             disabled={profileSaving}
             className="bg-primary-container text-white text-sm font-semibold px-4 py-2 rounded-lg disabled:opacity-50"
           >
-            {profileSaving ? "Saving…" : "Save profile"}
+            {profileSaving ? t("settings.saving") : t("settings.saveProfile")}
           </button>
         </form>
       </section>
 
-      {passwordFormSection({ heading: "Change password" })}
+      {passwordFormSection({ heading: t("settings.changePassword") })}
     </div>
   );
 }

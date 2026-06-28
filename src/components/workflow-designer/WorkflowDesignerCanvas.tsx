@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import WorkflowStepCard from "./WorkflowStepCard";
 import type { RbacRoleRow } from "@/lib/workflowRoles";
 import type { ApiWorkflow, WorkflowStep, WorkflowTransition } from "@/hooks/useWorkflow";
@@ -25,20 +26,21 @@ export default function WorkflowDesignerCanvas({
   onEditTransition,
   onDeleteTransition,
 }: Props) {
+  const { t } = useTranslation();
   return (
     <div className="flex-1 p-6 overflow-auto bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] relative">
       {workflow.steps.length === 0 ? (
         <div className="h-full flex flex-col items-center justify-center text-slate-400">
           <span className="material-symbols-outlined text-6xl mb-4 opacity-50">account_tree</span>
           <p className="text-lg">Canvas is empty</p>
-          <p className="text-sm">Add a step to begin designing.</p>
+          <p className="text-sm">{t("workflows.empty.canConfigure")}</p>
           {workflow.status === "DRAFT" && canConfigure && (
             <button
               type="button"
               onClick={onAddStep}
               className="mt-6 px-5 py-2.5 bg-primary text-white rounded-lg text-sm font-semibold hover:bg-primary-container"
             >
-              Add first step
+              {t("workflows.create")}
             </button>
           )}
         </div>

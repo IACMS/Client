@@ -1,4 +1,5 @@
 import { useId, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 type Props = {
   id?: string;
@@ -22,6 +23,7 @@ export default function PasswordInput({
   hint,
   className = "",
 }: Props) {
+  const { t } = useTranslation();
   const autoId = useId();
   const id = idProp ?? autoId;
   const [visible, setVisible] = useState(false);
@@ -45,7 +47,7 @@ export default function PasswordInput({
           <button
             type="button"
             className="material-symbols-outlined text-lg text-slate-500 hover:text-slate-700 bg-transparent border-0 p-1 cursor-pointer"
-            aria-label={visible ? "Hide password" : "Show password"}
+            aria-label={visible ? t("auth.hidePassword") : t("auth.showPassword")}
             onClick={() => setVisible((v) => !v)}
           >
             {visible ? "visibility" : "visibility_off"}

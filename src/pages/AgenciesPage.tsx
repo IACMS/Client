@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useIsAdmin, useSession } from "@/context/SessionContext";
 import RequestPartnershipModal from "@/components/RequestPartnershipModal";
 import CreateAgencyModal from "@/components/CreateAgencyModal";
@@ -65,6 +66,7 @@ export default function AgenciesPage() {
  * No case counts or operational case APIs — those require tenant-scoped case permissions.
  */
 function PlatformAgenciesDirectory() {
+  const { t } = useTranslation();
   const { user } = useSession();
   const { can } = usePermissions();
   const canCreateTenant = can("platform:manage_tenants");
@@ -84,16 +86,23 @@ function PlatformAgenciesDirectory() {
         if (!ac.signal.aborted) setTenants(Array.isArray(data.tenants) ? data.tenants : []);
       } catch (e) {
         if (isAbortError(e) || ac.signal.aborted) return;
-        setLoadError(e instanceof ApiError ? e.message : "Could not load the agency directory.");
+        setLoadError(e instanceof ApiError ? e.message : t("agencies.loadFailedGeneric"));
         setTenants([]);
       } finally {
         if (!ac.signal.aborted) setLoading(false);
       }
     })();
     return () => ac.abort();
-  }, []);
+  }, [t]);
 
-  const activeCount = tenants.filter((t) => t.isActive !== false).length;
+  const activeCount = tenants.filter((tenant) => tenant.isActive !== false).length;
+
+  const tableHeaders = [
+    t("agencies.table.code"),
+    t("agencies.table.name"),
+    t("agencies.table.status"),
+    t("agencies.table.profile"),
+  ];
 
   return (
     <div className="p-gutter max-w-7xl mx-auto w-full pb-10">
@@ -116,19 +125,16 @@ function PlatformAgenciesDirectory() {
       )}
       <div className="mb-8">
         <div className="flex items-center gap-2 text-slate-500 font-label-caps text-xs mb-2 flex-wrap">
-          <span>PORTAL</span>
+          <span>{t("portal.breadcrumb.portal")}</span>
           <span className="material-symbols-outlined text-xs">chevron_right</span>
-          <span>PLATFORM</span>
+          <span>{t("portal.breadcrumb.platform")}</span>
           <span className="material-symbols-outlined text-xs">chevron_right</span>
-          <span className="text-primary font-bold">AGENCY DIRECTORY</span>
+          <span className="text-primary font-bold">{t("portal.breadcrumb.agencyDirectory")}</span>
         </div>
         <div className="flex justify-between items-end flex-wrap gap-4">
           <div>
-            <h1 className="font-h1 text-primary">Registered agencies</h1>
-            <p className="font-body-md text-slate-600 mt-1">
-              All organizations on the platform. Case and workflow activity is not shown here — sign in as each
-              agency&apos;s operational users to work cases.
-            </p>
+            <h1 className="font-h1 text-primary">{t("agencies.platform.title")}</h1>
+            <p className="font-body-md text-slate-600 mt-1">{t("agencies.platform.subtitle")}</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Can permission="platform:manage_tenants">
@@ -139,7 +145,7 @@ function PlatformAgenciesDirectory() {
                 className="bg-white text-primary border-2 border-primary px-5 py-2.5 rounded-lg font-semibold flex items-center gap-2 hover:bg-slate-50 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <span className="material-symbols-outlined">add_business</span>
-                Register new agency
+                {t("agencies.registerNew")}
               </button>
             </Can>
           </div>
@@ -149,62 +155,59 @@ function PlatformAgenciesDirectory() {
       {lastCreatedAgency && (
         <div className="mb-6 p-4 rounded-xl border border-teal-200 bg-teal-50 text-teal-900 text-sm flex flex-wrap items-center justify-between gap-3">
           <p>
-            <span className="font-semibold">Recently registered:</span> {lastCreatedAgency.name}{" "}
-            <span className="font-mono">({lastCreatedAgency.code})</span> — share the tenant code and password with the
-            new administrator.
+            <span className="font-semibold">{t("agencies.recentlyRegistered")}</span> {lastCreatedAgency.name}{" "}
+            <span className="font-mono">({lastCreatedAgency.code})</span> {t("agencies.recentlyRegisteredHint")}
           </p>
           <button
             type="button"
             className="text-sm font-semibold text-teal-800 underline hover:no-underline"
             onClick={() => setLastCreatedAgency(null)}
           >
-            Dismiss
+            {t("common.dismiss")}
           </button>
         </div>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-gutter mb-8">
         <Stat
-          label="AGENCIES"
+          label={t("agencies.stats.agencies")}
           value={loading ? "…" : String(tenants.length)}
-          sub="From GET /api/v1/tenants"
+          sub={t("agencies.stats.fromApi")}
           valueClass="text-teal-700"
         />
         <Stat
-          label="ACTIVE"
+          label={t("agencies.stats.active")}
           value={loading ? "…" : String(activeCount)}
-          sub="Organizations marked active"
+          sub={t("agencies.stats.activeHint")}
           valueClass="text-emerald-700"
         />
         <div className="bg-white p-lg border border-outline-variant rounded-xl flex flex-col gap-1">
-          <span className="font-label-caps text-slate-500">OPERATIONAL DATA</span>
-          <span className="font-h2 text-slate-600">Not shown</span>
-          <span className="text-xs text-slate-500 font-medium">Cases and workflows are tenant-scoped.</span>
+          <span className="font-label-caps text-slate-500">{t("agencies.stats.operationalData")}</span>
+          <span className="font-h2 text-slate-600">{t("agencies.stats.notShown")}</span>
+          <span className="text-xs text-slate-500 font-medium">{t("agencies.stats.tenantScoped")}</span>
         </div>
       </div>
 
       {loadError && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-lg text-amber-900 mb-6">
-          <p className="font-semibold">Could not load directory</p>
+          <p className="font-semibold">{t("agencies.loadFailedTitle")}</p>
           <p className="text-sm mt-1">{loadError}</p>
         </div>
       )}
 
       <div className="bg-white border border-outline-variant rounded-xl overflow-hidden">
         <div className="p-lg border-b border-outline-variant bg-slate-50">
-          <p className="text-sm text-slate-600">
-            Platform-wide registry. Open a row for public tenant metadata only (no case or workflow metrics).
-          </p>
+          <p className="text-sm text-slate-600">{t("agencies.platform.registryIntro")}</p>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse min-w-[700px]">
             <thead className="bg-primary text-white">
               <tr>
-                {["CODE", "AGENCY NAME", "STATUS", "PROFILE"].map((h) => (
+                {tableHeaders.map((h) => (
                   <th
                     key={h}
-                    className={`p-md font-label-caps tracking-widest text-xs ${h === "PROFILE" ? "text-right" : ""}`}
+                    className={`p-md font-label-caps tracking-widest text-xs ${h === t("agencies.table.profile") ? "text-right" : ""}`}
                   >
                     {h}
                   </th>
@@ -216,31 +219,31 @@ function PlatformAgenciesDirectory() {
                 <tr>
                   <td colSpan={4} className="p-lg text-center text-slate-500">
                     <span className="material-symbols-outlined align-middle animate-spin">progress_activity</span>{" "}
-                    Loading…
+                    {t("common.loading")}
                   </td>
                 </tr>
               ) : tenants.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="p-lg text-center text-slate-500">
-                    No agencies returned.
+                    {t("agencies.empty")}
                   </td>
                 </tr>
               ) : (
-                tenants.map((t) => (
-                  <tr key={t.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="p-md font-system-id font-bold text-teal-800">{t.code}</td>
-                    <td className="p-md font-body-sm font-semibold text-slate-900">{t.name}</td>
+                tenants.map((tenant) => (
+                  <tr key={tenant.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="p-md font-system-id font-bold text-teal-800">{tenant.code}</td>
+                    <td className="p-md font-body-sm font-semibold text-slate-900">{tenant.name}</td>
                     <td className="p-md">
                       <span className="px-2.5 py-0.5 rounded-full text-xs font-bold border bg-green-50 text-green-700 border-green-200">
-                        {t.isActive === false ? "INACTIVE" : "ACTIVE"}
+                        {tenant.isActive === false ? t("agencies.status.inactive") : t("agencies.status.active")}
                       </span>
                     </td>
                     <td className="p-md text-right">
                       <Link
-                        to={`/agencies/${encodeURIComponent(t.code.toLowerCase())}`}
+                        to={`/agencies/${encodeURIComponent(tenant.code.toLowerCase())}`}
                         className="text-primary hover:text-teal-700 font-semibold text-sm"
                       >
-                        Open profile
+                        {t("agencies.openProfile")}
                       </Link>
                     </td>
                   </tr>
@@ -255,6 +258,7 @@ function PlatformAgenciesDirectory() {
 }
 
 function TenantAgenciesDirectory() {
+  const { t } = useTranslation();
   const { user } = useSession();
   const tenant = user?.tenant;
   const tenantId = tenant?.id ?? user?.tenantId;
@@ -271,23 +275,6 @@ function TenantAgenciesDirectory() {
   useEffect(() => {
     const ac = new AbortController();
     (async () => {
-      fetch("http://127.0.0.1:7377/ingest/6302afe2-f95e-483b-b849-884818589670", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "99907a" },
-        body: JSON.stringify({
-          sessionId: "99907a",
-          runId: "post-session-normalize",
-          hypothesisId: "H1",
-          location: "AgenciesPage.tsx:fetch:start",
-          message: "agencies load tenant resolution",
-          data: {
-            tenantFromNestedObject: Boolean(tenant?.id),
-            tenantFromFlat: Boolean(user?.tenantId),
-            effectiveTenantIdForPage: tenantId ?? null,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
       if (!tenantId) {
         setCaseCount(null);
         setTenantDetail(null);
@@ -309,40 +296,31 @@ function TenantAgenciesDirectory() {
         setTenantDetail(tenantRes.tenant ?? null);
       } catch (e) {
         if (isAbortError(e) || ac.signal.aborted) return;
-        fetch("http://127.0.0.1:7377/ingest/6302afe2-f95e-483b-b849-884818589670", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "99907a" },
-          body: JSON.stringify({
-            sessionId: "99907a",
-            runId: "post-session-normalize",
-            hypothesisId: "H4",
-            location: "AgenciesPage.tsx:fetch:error",
-            message: "agencies bundle API error",
-            data: {
-              isApiError: e instanceof ApiError,
-              status: e instanceof ApiError ? e.status : null,
-              name: e instanceof Error ? e.name : "unknown",
-            },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
         const msg =
           e instanceof ApiError
             ? e.message
-            : "Could not load tenant or case count. Ensure gateway, auth, and case services are running.";
+            : t("agencies.tenantLoadFailed");
         setLoadError(msg);
         setCaseCount(null);
         setTenantDetail(null);
       }
     })();
     return () => ac.abort();
-  }, [tenantId, tenant?.id, user?.tenantId]);
+  }, [tenantId, tenant?.id, user?.tenantId, t]);
 
   const profileHref = useMemo(() => {
     const code = tenantDetail?.code ?? tenant?.code;
     if (!code) return null;
     return `/agencies/${encodeURIComponent(code.toLowerCase())}`;
   }, [tenantDetail?.code, tenant?.code]);
+
+  const tableHeaders = [
+    t("agencies.table.code"),
+    t("agencies.table.name"),
+    t("agencies.table.status"),
+    t("agencies.table.linkedCases"),
+    t("agencies.table.profile"),
+  ];
 
   return (
     <div className="p-gutter max-w-7xl mx-auto w-full pb-10">
@@ -363,18 +341,16 @@ function TenantAgenciesDirectory() {
       )}
       <div className="mb-8">
         <div className="flex items-center gap-2 text-slate-500 font-label-caps text-xs mb-2 flex-wrap">
-          <span>PORTAL</span>
+          <span>{t("portal.breadcrumb.portal")}</span>
           <span className="material-symbols-outlined text-xs">chevron_right</span>
-          <span>INTER-AGENCY NETWORK</span>
+          <span>{t("portal.breadcrumb.interAgencyNetwork")}</span>
           <span className="material-symbols-outlined text-xs">chevron_right</span>
-          <span className="text-primary font-bold">AGENCY DIRECTORY</span>
+          <span className="text-primary font-bold">{t("portal.breadcrumb.agencyDirectory")}</span>
         </div>
         <div className="flex justify-between items-end flex-wrap gap-4">
           <div>
-            <h1 className="font-h1 text-primary">Partner Agency Registry</h1>
-            <p className="font-body-md text-slate-600 mt-1">
-              Your session tenant from the IACMS gateway. Full multi-tenant directory requires additional APIs.
-            </p>
+            <h1 className="font-h1 text-primary">{t("agencies.tenant.title")}</h1>
+            <p className="font-body-md text-slate-600 mt-1">{t("agencies.tenant.subtitle")}</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Can permission="platform:manage_tenants">
@@ -385,7 +361,7 @@ function TenantAgenciesDirectory() {
                 className="bg-white text-primary border-2 border-primary px-5 py-2.5 rounded-lg font-semibold flex items-center gap-2 hover:bg-slate-50 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <span className="material-symbols-outlined">add_business</span>
-                Register new agency
+                {t("agencies.registerNew")}
               </button>
             </Can>
             <Can permission="referrals:create">
@@ -396,7 +372,7 @@ function TenantAgenciesDirectory() {
                 className="bg-primary text-white px-6 py-2.5 rounded-lg font-semibold flex items-center gap-2 hover:bg-primary-container transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <span className="material-symbols-outlined">domain_add</span>
-                Request partnership
+                {t("agencies.requestPartnership")}
               </button>
             </Can>
           </div>
@@ -406,65 +382,61 @@ function TenantAgenciesDirectory() {
       {lastCreatedAgency && (
         <div className="mb-6 p-4 rounded-xl border border-teal-200 bg-teal-50 text-teal-900 text-sm flex flex-wrap items-center justify-between gap-3">
           <p>
-            <span className="font-semibold">Recently registered:</span> {lastCreatedAgency.name}{" "}
-            <span className="font-mono">({lastCreatedAgency.code})</span> — share the tenant code and password with the
-            new administrator.
+            <span className="font-semibold">{t("agencies.recentlyRegistered")}</span> {lastCreatedAgency.name}{" "}
+            <span className="font-mono">({lastCreatedAgency.code})</span> {t("agencies.recentlyRegisteredHint")}
           </p>
           <button
             type="button"
             className="text-sm font-semibold text-teal-800 underline hover:no-underline"
             onClick={() => setLastCreatedAgency(null)}
           >
-            Dismiss
+            {t("common.dismiss")}
           </button>
         </div>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-gutter mb-8">
-        <Stat label="REGISTERED (SESSION)" value={tenant ? "1" : "0"} sub="Tenant on your login" />
+        <Stat label={t("agencies.stats.registeredSession")} value={tenant ? "1" : "0"} sub={t("agencies.stats.sessionHint")} />
         <Stat
-          label="OPEN CASES"
+          label={t("agencies.stats.openCases")}
           value={caseCount === null ? "—" : String(caseCount)}
-          sub="GET /api/v1/cases for your tenant"
+          sub={t("agencies.stats.casesHint")}
           valueClass="text-teal-700"
         />
         <Stat
-          label="TENANT STATUS"
-          value={tenantDetail?.isActive === false ? "Inactive" : "Active"}
-          hint={tenantDetail?.code ? `Code ${tenantDetail.code}` : undefined}
+          label={t("agencies.stats.tenantStatus")}
+          value={tenantDetail?.isActive === false ? t("common.inactive") : t("common.active")}
+          hint={tenantDetail?.code ? t("agencies.stats.codeHint", { code: tenantDetail.code }) : undefined}
           hintIcon="verified"
           hintClass="text-teal-600"
         />
         <div className="bg-white p-lg border border-outline-variant rounded-xl flex flex-col gap-1">
-          <span className="font-label-caps text-slate-500">GATEWAY</span>
-          <span className="font-h2 text-slate-800">Connected</span>
-          <span className="text-xs text-slate-500 font-medium">Session + tenant APIs</span>
+          <span className="font-label-caps text-slate-500">{t("agencies.stats.gateway")}</span>
+          <span className="font-h2 text-slate-800">{t("agencies.stats.connected")}</span>
+          <span className="text-xs text-slate-500 font-medium">{t("agencies.stats.gatewayHint")}</span>
         </div>
       </div>
 
       {loadError && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-lg text-amber-900 mb-6">
-          <p className="font-semibold">Could not load registry details</p>
+          <p className="font-semibold">{t("agencies.registryDetailsFailed")}</p>
           <p className="text-sm mt-1">{loadError}</p>
         </div>
       )}
 
       <div className="bg-white border border-outline-variant rounded-xl overflow-hidden">
         <div className="p-lg border-b border-outline-variant bg-slate-50">
-          <p className="text-sm text-slate-600">
-            Directory row is populated from <span className="font-mono text-xs">GET /api/v1/tenants/:id</span> and your
-            session.
-          </p>
+          <p className="text-sm text-slate-600">{t("agencies.tenant.registryIntro")}</p>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse min-w-[900px]">
             <thead className="bg-primary text-white">
               <tr>
-                {["CODE", "AGENCY NAME", "STATUS", "LINKED CASES", "PROFILE"].map((h) => (
+                {tableHeaders.map((h) => (
                   <th
                     key={h}
-                    className={`p-md font-label-caps tracking-widest text-xs ${h === "PROFILE" ? "text-right" : ""}`}
+                    className={`p-md font-label-caps tracking-widest text-xs ${h === t("agencies.table.profile") ? "text-right" : ""}`}
                   >
                     {h}
                   </th>
@@ -475,7 +447,7 @@ function TenantAgenciesDirectory() {
               {!tenant && !tenantDetail ? (
                 <tr>
                   <td colSpan={5} className="p-lg text-center text-slate-500">
-                    No tenant on session. Sign in with a tenant code (e.g. TEST-ORG).
+                    {t("agencies.noTenant")}
                   </td>
                 </tr>
               ) : (
@@ -488,7 +460,7 @@ function TenantAgenciesDirectory() {
                   </td>
                   <td className="p-md">
                     <span className="px-2.5 py-0.5 rounded-full text-xs font-bold border bg-green-50 text-green-700 border-green-200">
-                      {tenantDetail?.isActive === false ? "INACTIVE" : "ACTIVE"}
+                      {tenantDetail?.isActive === false ? t("agencies.status.inactive") : t("agencies.status.active")}
                     </span>
                   </td>
                   <td className="p-md font-body-sm font-semibold text-slate-800">
@@ -497,7 +469,7 @@ function TenantAgenciesDirectory() {
                   <td className="p-md text-right">
                     {profileHref ? (
                       <Link to={profileHref} className="text-primary hover:text-teal-700 font-semibold text-sm">
-                        Open profile
+                        {t("agencies.openProfile")}
                       </Link>
                     ) : (
                       <span className="text-slate-400 text-sm">—</span>
@@ -511,7 +483,7 @@ function TenantAgenciesDirectory() {
 
         <div className="p-lg border-t border-outline-variant bg-slate-50 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="text-sm text-slate-500">
-            Showing your tenant only · Configure RBAC for broader directory access when the backend supports it.
+            {t("agencies.showingTenantOnly")}
           </div>
         </div>
       </div>
@@ -520,33 +492,33 @@ function TenantAgenciesDirectory() {
         <div className="bg-white border border-outline-variant rounded-xl p-lg">
           <h3 className="font-h3 text-primary mb-4 flex items-center gap-2">
             <span className="material-symbols-outlined">verified</span>
-            Data-sharing posture
+            {t("agencies.dataSharing.title")}
           </h3>
           <p className="font-body-md text-slate-600 mb-6">
-            Each partner signs a bilateral or mesh agreement before elevated case payloads cross agency boundaries.
+            {t("agencies.dataSharing.body")}
           </p>
           <ul className="space-y-4">
             <li className="flex gap-3 border-l-2 border-teal-600 pl-3">
               <div>
-                <p className="font-label-caps text-xs text-slate-500">TIER A</p>
-                <p className="font-body-sm font-semibold text-slate-900">Full operational sync</p>
-                <p className="text-xs text-slate-500">Eligible for escalation routing and dossier export.</p>
+                <p className="font-label-caps text-xs text-slate-500">{t("agencies.dataSharing.tierA")}</p>
+                <p className="font-body-sm font-semibold text-slate-900">{t("agencies.dataSharing.fullSync")}</p>
+                <p className="text-xs text-slate-500">{t("agencies.dataSharing.fullSyncHint")}</p>
               </div>
             </li>
           </ul>
         </div>
         <div className="bg-primary-container text-white rounded-xl p-lg flex flex-col justify-between overflow-hidden relative min-h-[260px]">
           <div className="relative z-10">
-            <h3 className="font-h3 mb-2">Network health</h3>
-            <p className="text-teal-100 font-body-sm mb-6">Placeholder metrics until observability is wired.</p>
+            <h3 className="font-h3 mb-2">{t("agencies.networkHealth.title")}</h3>
+            <p className="text-teal-100 font-body-sm mb-6">{t("agencies.networkHealth.placeholder")}</p>
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
-                <span className="text-teal-200 font-label-caps text-xs block">API</span>
-                <span className="font-h2 text-white">Gateway</span>
+                <span className="text-teal-200 font-label-caps text-xs block">{t("agencies.networkHealth.api")}</span>
+                <span className="font-h2 text-white">{t("agencies.networkHealth.gateway")}</span>
               </div>
               <div>
-                <span className="text-teal-200 font-label-caps text-xs block">SESSION</span>
-                <span className="font-h2 text-white">{user ? "Active" : "—"}</span>
+                <span className="text-teal-200 font-label-caps text-xs block">{t("agencies.networkHealth.session")}</span>
+                <span className="font-h2 text-white">{user ? t("agencies.networkHealth.active") : "—"}</span>
               </div>
             </div>
           </div>

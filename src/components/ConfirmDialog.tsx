@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 type Props = {
   open: boolean;
   title: string;
@@ -14,13 +16,16 @@ export default function ConfirmDialog({
   open,
   title,
   message,
-  confirmLabel = "Confirm",
-  cancelLabel = "Cancel",
+  confirmLabel,
+  cancelLabel,
   variant = "primary",
   busy = false,
   onConfirm,
   onCancel,
 }: Props) {
+  const { t } = useTranslation();
+  const resolvedConfirm = confirmLabel ?? t("common.confirm");
+  const resolvedCancel = cancelLabel ?? t("common.cancel");
   if (!open) return null;
 
   const confirmClass =
@@ -54,7 +59,7 @@ export default function ConfirmDialog({
             disabled={busy}
             className="px-4 py-2 rounded-lg border border-slate-200 font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
           >
-            {cancelLabel}
+            {resolvedCancel}
           </button>
           <button
             type="button"
@@ -62,7 +67,7 @@ export default function ConfirmDialog({
             disabled={busy}
             className={`px-4 py-2 rounded-lg font-semibold disabled:opacity-50 ${confirmClass}`}
           >
-            {busy ? "Please wait…" : confirmLabel}
+            {busy ? t("common.pleaseWait") : resolvedConfirm}
           </button>
         </div>
       </div>

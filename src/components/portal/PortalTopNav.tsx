@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { useIsAdmin, useSession } from "@/context/SessionContext";
 import { usePermissions } from "@/permissions/usePermissions";
 import { getApiBase } from "@/lib/api";
@@ -9,6 +11,7 @@ const AVATAR =
 
 /** Shared top chrome for portal routes (`/dashboard`, `/cases`, `/agencies`, case detail). */
 export default function PortalTopNav() {
+  const { t } = useTranslation();
   const { user, logout } = useSession();
   const navigate = useNavigate();
   const { can, allOf } = usePermissions();
@@ -42,7 +45,7 @@ export default function PortalTopNav() {
   }
 
   const displayName =
-    [user?.firstName, user?.lastName].filter(Boolean).join(" ").trim() || user?.email || "Account";
+    [user?.firstName, user?.lastName].filter(Boolean).join(" ").trim() || user?.email || t("common.account");
 
   return (
     <header className="relative z-50 bg-white dark:bg-slate-900 flex h-16 flex-nowrap items-center justify-between gap-3 px-4 sm:px-6 w-full shrink-0 sticky top-0 border-b border-slate-200 dark:border-slate-800">
@@ -78,7 +81,7 @@ export default function PortalTopNav() {
                   } px-3 font-inter text-sm font-medium h-full flex items-center transition-colors whitespace-nowrap`
                 }
               >
-                Cases
+                {t("nav.cases")}
               </NavLink>
             )}
             <NavLink
@@ -89,7 +92,7 @@ export default function PortalTopNav() {
                 } px-3 font-inter text-sm font-medium h-full flex items-center transition-colors whitespace-nowrap`
               }
             >
-              Dashboard
+              {t("nav.dashboard")}
             </NavLink>
             {showAgencies && (
               <NavLink
@@ -103,7 +106,7 @@ export default function PortalTopNav() {
                   } px-3 font-inter text-sm font-medium h-full flex items-center transition-colors whitespace-nowrap`
                 }
               >
-                Agencies
+                {t("nav.agencies")}
               </NavLink>
             )}
           </nav>
@@ -116,21 +119,26 @@ export default function PortalTopNav() {
           </span>
           <input
             className="bg-slate-100 border-none rounded-lg pl-10 pr-3 py-2 text-sm focus:ring-2 focus:ring-primary w-48 2xl:w-64 max-w-[12rem]"
-            placeholder="Global Search..."
+            placeholder={t("nav.globalSearch")}
             type="search"
-            aria-label="Global search"
+            aria-label={t("nav.globalSearchAria")}
           />
         </div>
-        <button type="button" className="text-slate-600 dark:text-slate-400 hover:bg-slate-50 p-2 rounded-full cursor-pointer transition-colors">
+        <LanguageSwitcher className="hidden sm:block" />
+        <button
+          type="button"
+          className="text-slate-600 dark:text-slate-400 hover:bg-slate-50 p-2 rounded-full cursor-pointer transition-colors"
+          aria-label={t("common.notifications")}
+        >
           <span className="material-symbols-outlined">notifications</span>
         </button>
         <div className="h-8 w-px bg-slate-200 mx-2 hidden sm:block" aria-hidden />
         <button
           type="button"
           className="hidden lg:flex items-center gap-2 px-2 sm:px-3 py-1.5 rounded-lg border border-outline hover:bg-slate-50 text-xs sm:text-sm font-medium font-inter text-on-surface max-w-[12rem]"
-          title="Current tenant from session"
+          title={t("nav.currentTenant")}
         >
-          <span className="truncate">{user?.tenant?.code ?? "Tenant"}</span>
+          <span className="truncate">{user?.tenant?.code ?? t("common.tenant")}</span>
           <span className="material-symbols-outlined text-sm shrink-0">expand_more</span>
         </button>
 
@@ -141,7 +149,7 @@ export default function PortalTopNav() {
             className="flex items-center gap-2 rounded-full border border-slate-200 dark:border-slate-600 p-0.5 pl-1 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             aria-expanded={accountMenuOpen}
             aria-haspopup="menu"
-            aria-label="Account menu"
+            aria-label={t("nav.accountMenu")}
           >
             <img alt="" className="w-8 h-8 rounded-full object-cover" src={AVATAR} />
             <span className="material-symbols-outlined text-slate-500 text-sm pr-1 hidden sm:inline">
@@ -169,7 +177,7 @@ export default function PortalTopNav() {
                 onClick={() => setAccountMenuOpen(false)}
               >
                 <span className="material-symbols-outlined text-[18px] text-slate-500">settings</span>
-                Account settings
+                {t("nav.accountSettings")}
               </Link>
               <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
               <button
@@ -179,7 +187,7 @@ export default function PortalTopNav() {
                 onClick={() => void handleSignOut()}
               >
                 <span className="material-symbols-outlined text-[18px] text-slate-500">logout</span>
-                Sign out
+                {t("nav.signOut")}
               </button>
             </div>
           ) : null}

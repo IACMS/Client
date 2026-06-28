@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { roleNamesForIds, type RbacRoleRow } from "@/lib/workflowRoles";
 import type { ApiWorkflow, WorkflowStep, WorkflowTransition } from "@/hooks/useWorkflow";
 
@@ -32,10 +33,11 @@ export default function WorkflowStepCard({
   onEditTransition,
   onDeleteTransition,
 }: Props) {
+  const { t } = useTranslation();
   const stepRoles = roleNamesForIds(rbacRoles, step.allowedRoleIds);
   const isDraft = workflow.status === "DRAFT";
   const isEditable = isDraft && canConfigure;
-  const outgoing = workflow.transitions.filter((t) => t.fromStepId === step.id);
+  const outgoing = workflow.transitions.filter((tr) => tr.fromStepId === step.id);
 
   return (
     <div
@@ -48,7 +50,7 @@ export default function WorkflowStepCard({
           type="button"
           onClick={() => onEditStep(step)}
           className="absolute top-2 right-2 p-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
-          aria-label="Edit step"
+          aria-label={t("common.edit")}
         >
           <span className="material-symbols-outlined text-[18px]">edit</span>
         </button>
@@ -65,11 +67,11 @@ export default function WorkflowStepCard({
       )}
 
       <h3 className="font-bold text-slate-800 mt-2 pr-10">{step.name}</h3>
-      <p className="text-[10px] text-slate-400 font-mono mb-2">key: {step.key}</p>
+      <p className="text-[10px] text-slate-400 font-mono mb-2">{t("cases.detail.stepKey", { key: step.key })}</p>
       {step.requiresAttachment && (
         <p className="text-[10px] font-semibold text-teal-800 bg-teal-50 border border-teal-100 rounded px-2 py-1 mb-2 inline-flex items-center gap-1">
           <span className="material-symbols-outlined text-[14px]">attach_file</span>
-          Attachment required to proceed
+          {t("cases.detail.needsFile")}
         </p>
       )}
       {stepRoles.length > 0 ? (
@@ -77,24 +79,26 @@ export default function WorkflowStepCard({
           <span className="font-semibold">Roles:</span> {stepRoles.join(", ")}
         </p>
       ) : (
-        <p className="text-[10px] text-slate-400 mb-3">Roles: any</p>
+        <p className="text-[10px] text-slate-400 mb-3">
+          <span className="font-semibold">{t("modals.users.role")}:</span> {t("common.all")}
+        </p>
       )}
 
       <div className="space-y-2 border-t border-slate-100 pt-3">
         <p className="text-xs font-label-caps text-slate-500">OUTGOING TRANSITIONS</p>
-        {outgoing.length === 0 && <p className="text-xs text-slate-400 italic">None</p>}
-        {outgoing.map((t) => {
-          const target = workflow.steps.find((s) => s.id === t.toStepId);
-          const trRoles = roleNamesForIds(rbacRoles, t.allowedRoleIds);
-          const lim = transitionLimitShort(t);
+        {outgoing.length === 0 && <p className="text-xs text-slate-400 italic">{t("common.none")}</p>}
+        {outgoing.map((tr) => {
+          const target = workflow.steps.find((s) => s.id === tr.toStepId);
+          const trRoles = roleNamesForIds(rbacRoles, tr.allowedRoleIds);
+          const lim = transitionLimitShort(tr);
           return (
             <div
-              key={t.id}
+              key={tr.id}
               className="bg-slate-50 border border-slate-200 rounded p-2 text-xs flex flex-col gap-1"
             >
               <div className="flex justify-between items-start gap-2">
                 <div className="flex justify-between items-center gap-2 flex-1 min-w-0">
-                  <span className="font-semibold text-primary truncate">{t.name}</span>
+                  <span className="font-semibold text-primary truncate">{tr.name}</span>
                   <span className="flex items-center gap-1 text-slate-500 shrink-0">
                     <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
                     {target?.name}
@@ -104,17 +108,17 @@ export default function WorkflowStepCard({
                   <div className="flex gap-0.5 shrink-0">
                     <button
                       type="button"
-                      onClick={() => onEditTransition(t)}
+                      onClick={() => onEditTransition(tr)}
                       className="p-1 rounded text-slate-600 hover:bg-slate-200"
-                      aria-label="Edit transition"
+                      aria-label={t("modals.workflow.editTransition")}
                     >
                       <span className="material-symbols-outlined text-[16px]">edit</span>
                     </button>
                     <button
                       type="button"
-                      onClick={() => onDeleteTransition(t)}
+                      onClick={() => onDeleteTransition(tr)}
                       className="p-1 rounded text-red-700 hover:bg-red-100"
-                      aria-label="Delete transition"
+                      aria-label={t("workflows.designer.delete")}
                     >
                       <span className="material-symbols-outlined text-[16px]">close</span>
                     </button>
@@ -126,16 +130,16 @@ export default function WorkflowStepCard({
               ) : (
                 <span className="text-[10px] text-slate-400">Execute: any role</span>
               )}
-              {t.timeLimitType === "DEADLINE" && lim && (
+              {tr.timeLimitType === "DEADLINE" && lim && (
                 <span className="text-[10px] font-semibold text-red-800 bg-red-50 border border-red-100 rounded px-1.5 py-0.5 inline-flex items-center gap-0.5">
                   <span className="material-symbols-outlined text-[12px]">schedule</span>
-                  Deadline {lim}
+                  {t("modals.caseProgress.deadline")} {lim}
                 </span>
               )}
-              {t.timeLimitType === "RECOMMENDATION" && lim && (
+              {tr.timeLimitType === "RECOMMENDATION" && lim && (
                 <span className="text-[10px] font-semibold text-sky-900 bg-sky-50 border border-sky-100 rounded px-1.5 py-0.5 inline-flex items-center gap-0.5">
                   <span className="material-symbols-outlined text-[12px]">lightbulb</span>
-                  Target {lim}
+                  {t("modals.caseProgress.suggestedTarget")} {lim}
                 </span>
               )}
             </div>

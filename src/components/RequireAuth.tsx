@@ -1,8 +1,10 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useSession } from "@/context/SessionContext";
 
 /** Wrap portal routes; redirects to `/login` when there is no session. */
 export default function RequireAuth() {
+  const { t } = useTranslation();
   const { user, status } = useSession();
   const location = useLocation();
 
@@ -15,7 +17,7 @@ export default function RequireAuth() {
         >
           progress_activity
         </span>
-        <p className="font-body-sm">Checking session…</p>
+        <p className="font-body-sm">{t("auth.checkingSession")}</p>
       </div>
     );
   }

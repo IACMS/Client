@@ -39,6 +39,9 @@ export type ApiCaseCurrentStep = {
 export type ApiCase = {
   id: string;
   tenantId?: string;
+  currentTenantId?: string | null;
+  originatingTenantId?: string | null;
+  referralStatus?: string | null;
   caseNumber: string;
   title: string;
   description?: string | null;
@@ -67,6 +70,31 @@ export function statusBadgeClass(status: string): string {
   if (s.includes("resolved") || s.includes("closed")) return "bg-green-50 text-green-700 border-green-200";
   if (s.includes("pending")) return "bg-amber-50 text-amber-700 border-amber-200";
   return "bg-blue-50 text-blue-700 border-blue-200";
+}
+
+/** Tenant that currently holds workflow custody for this case. */
+export function caseCustodyTenantId(caseRow: ApiCase | null | undefined): string | undefined {
+  if (!caseRow) return undefined;
+  return caseRow.currentTenantId ?? caseRow.tenantId ?? undefined;
+}
+
+export function tenantHoldsCaseCustody(
+  caseRow: ApiCase | null | undefined,
+  actorTenantId: string | undefined,
+): boolean {
+  if (!caseRow || !actorTenantId) return false;
+  return caseCustodyTenantId(caseRow) === actorTenantId;
+}
+
+/** Case was referred to the signed-in tenant and is awaiting accept/reject. */
+export function isIncomingPendingReferral(
+  caseRow: ApiCase | null | undefined,
+  actorTenantId: string | undefined,
+): boolean {
+  if (!caseRow || !actorTenantId || !caseRow.referralStatus) return false;
+  const rs = caseRow.referralStatus.toLowerCase();
+  if (rs !== "pending_referral" && rs !== "pending") return false;
+  return Boolean(caseRow.tenantId && caseRow.tenantId !== actorTenantId);
 }
 
 export function priorityDisplay(priority: string): { label: string; dot: string; textClass: string } {

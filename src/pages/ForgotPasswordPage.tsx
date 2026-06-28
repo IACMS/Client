@@ -1,5 +1,7 @@
 import { FormEvent, useState } from "react";
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { StubNavItem } from "@/components/StubNavItem";
 import { ApiError, apiPost } from "@/lib/api";
 
@@ -7,6 +9,7 @@ const SIDE_IMG =
   "https://lh3.googleusercontent.com/aida-public/AB6AXuCzsDG2bn1Yds1Y1weX61V7TClBwcJTIvgYHqF1c3fbeGHZSJcHCrZXyDhFFrmxXdBPmUKc9Rj_CDwOdqfQNMN10WW6PxS7lEiG-H7Qblv1apOZvz2La8B5lebDC6f-4t0m15GOFOfUvv06xEC3WfVZzRYODV5NKQDSLji0wup4Ni4Mokv0ssbD4oPPVbWv6c0tTUX9ZaubIRFYdwookBR9lbB26B2sN_f83ZbiciNj-DCuWcjwqC4cEJCMPgut5cWZpGm5id9Htt9g";
 
 export default function ForgotPasswordPage() {
+  const { t } = useTranslation();
   const [email, setEmail] = useState("");
   const [tenant, setTenant] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -18,7 +21,7 @@ export default function ForgotPasswordPage() {
     const em = email.trim().toLowerCase();
     const tc = tenant.trim();
     if (!em) {
-      setErrorMessage("Email is required.");
+      setErrorMessage(t("auth.forgotPassword.emailRequired"));
       return;
     }
     setErrorMessage(null);
@@ -35,10 +38,10 @@ export default function ForgotPasswordPage() {
           ? err.message
           : err instanceof Error
             ? err.message
-            : "Could not submit reset request.";
+            : t("auth.forgotPassword.submitFailed");
       setErrorMessage(
         msg.includes("fetch") || msg === "Failed to fetch"
-          ? "Cannot reach the API gateway. Check VITE_API_URL and that the backend is running."
+          ? t("auth.apiUnreachableShort")
           : msg,
       );
     } finally {
@@ -64,45 +67,41 @@ export default function ForgotPasswordPage() {
                   </div>
                   <span className="font-h2 text-white tracking-tight">IACMS</span>
                 </div>
-                <h1 className="font-h1 text-white mb-md">Secure Credential Recovery</h1>
+                <h1 className="font-h1 text-white mb-md">{t("auth.forgotPassword.heroTitle")}</h1>
                 <p className="font-body-lg text-on-primary-container opacity-90 max-w-sm">
-                  If your account exists, you will receive an email with a link to reset your password (when the
-                  notification service and SMTP are configured).
+                  {t("auth.forgotPassword.heroBody")}
                 </p>
               </div>
               <div className="space-y-md">
                 <div className="flex items-center gap-md text-white/80">
                   <span className="material-symbols-outlined text-sm">verified_user</span>
-                  <span className="font-label-caps uppercase">Email-based reset</span>
+                  <span className="font-label-caps uppercase">{t("auth.forgotPassword.emailReset")}</span>
                 </div>
                 <div className="h-px bg-white/20 w-full" />
-                <p className="font-body-sm text-white/60 italic">
-                  The reset link points to <span className="font-mono text-xs">/reset-password?token=…</span> on this app.
-                </p>
+                <p className="font-body-sm text-white/60 italic">{t("auth.forgotPassword.linkHint")}</p>
               </div>
             </div>
           </div>
           <div className="p-xl flex flex-col justify-center">
             {done ? (
               <div>
-                <h2 className="font-h2 text-primary mb-xs">Check your email</h2>
+                <h2 className="font-h2 text-primary mb-xs">{t("auth.forgotPassword.checkEmailTitle")}</h2>
                 <p className="font-body-md text-on-surface-variant mb-lg">
-                  If an account with that email exists, a password reset link has been sent. Follow the link to choose a
-                  new password.
+                  {t("auth.forgotPassword.checkEmailBody")}
                 </p>
                 <Link
                   to="/login"
                   className="inline-flex items-center gap-2 text-primary font-semibold hover:underline"
                 >
                   <span className="material-symbols-outlined text-sm">arrow_back</span>
-                  Return to login
+                  {t("auth.forgotPassword.returnToLogin")}
                 </Link>
               </div>
             ) : (
               <>
                 <div className="mb-xl">
-                  <h2 className="font-h2 text-primary mb-xs">Forgot password</h2>
-                  <p className="font-body-md text-on-surface-variant">We&apos;ll email a reset link if the account exists.</p>
+                  <h2 className="font-h2 text-primary mb-xs">{t("auth.forgotPassword.title")}</h2>
+                  <p className="font-body-md text-on-surface-variant">{t("auth.forgotPassword.subtitle")}</p>
                 </div>
                 <form className="space-y-lg" onSubmit={sendReset}>
                   {errorMessage && (
@@ -110,7 +109,7 @@ export default function ForgotPasswordPage() {
                   )}
                   <div className="space-y-xs">
                     <label className="font-label-caps text-on-surface-variant uppercase" htmlFor="email">
-                      Email
+                      {t("auth.forgotPassword.email")}
                     </label>
                     <div className="relative">
                       <span className="material-symbols-outlined absolute left-md top-1/2 -translate-y-1/2 text-outline pointer-events-none">
@@ -119,7 +118,7 @@ export default function ForgotPasswordPage() {
                       <input
                         className="w-full pl-11 pr-md py-md bg-surface-container-low border border-outline-variant rounded-lg focus:ring-2 focus:ring-primary-container focus:border-primary-container outline-none transition-all font-body-md"
                         id="email"
-                        placeholder="name@agency.gov"
+                        placeholder={t("auth.forgotPassword.emailPlaceholder")}
                         type="email"
                         value={email}
                         onChange={(ev) => setEmail(ev.target.value)}
@@ -130,7 +129,7 @@ export default function ForgotPasswordPage() {
                   </div>
                   <div className="space-y-xs">
                     <label className="font-label-caps text-on-surface-variant uppercase" htmlFor="tenant">
-                      Tenant code (optional)
+                      {t("auth.forgotPassword.tenantOptional")}
                     </label>
                     <div className="relative">
                       <span className="material-symbols-outlined absolute left-md top-1/2 -translate-y-1/2 text-outline pointer-events-none">
@@ -139,7 +138,7 @@ export default function ForgotPasswordPage() {
                       <input
                         className="w-full pl-11 pr-md py-md bg-surface-container-low border border-outline-variant rounded-lg focus:ring-2 focus:ring-primary-container focus:border-primary-container outline-none transition-all font-body-md"
                         id="tenant"
-                        placeholder="e.g. TEST-ORG"
+                        placeholder={t("auth.forgotPassword.tenantPlaceholder")}
                         type="text"
                         value={tenant}
                         onChange={(ev) => setTenant(ev.target.value)}
@@ -153,14 +152,14 @@ export default function ForgotPasswordPage() {
                       disabled={submitting}
                       className="w-full bg-primary-container text-white font-semibold py-md rounded-lg hover:bg-primary transition-all flex items-center justify-center gap-md shadow-sm disabled:opacity-60"
                     >
-                      {submitting ? "Sending…" : "Send reset link"}
+                      {submitting ? t("auth.forgotPassword.sending") : t("auth.forgotPassword.sendLink")}
                       <span className="material-symbols-outlined text-lg">arrow_forward</span>
                     </button>
                   </div>
                   <div className="flex justify-center pt-md">
                     <Link className="font-body-sm text-primary hover:underline flex items-center gap-xs" to="/login">
                       <span className="material-symbols-outlined text-sm">arrow_back</span>
-                      Return to login
+                      {t("auth.forgotPassword.returnToLogin")}
                     </Link>
                   </div>
                 </form>
@@ -171,13 +170,14 @@ export default function ForgotPasswordPage() {
       </div>
       <footer className="flex flex-col md:flex-row justify-between items-center w-full py-8 px-6 mt-auto border-t border-slate-200 bg-white">
         <div className="flex flex-col md:flex-row items-center gap-gutter">
-          <span className="text-teal-900 font-semibold font-body-sm">IACMS Portal</span>
-          <span className="text-xs font-normal text-slate-500">© 2024 Government Case Management System.</span>
+          <span className="text-teal-900 font-semibold font-body-sm">{t("auth.forgotPassword.footerPortal")}</span>
+          <span className="text-xs font-normal text-slate-500">{t("auth.forgotPassword.footerNotice")}</span>
         </div>
         <div className="flex flex-wrap justify-center gap-lg mt-md md:mt-0 items-center">
-          <StubNavItem className="text-xs font-normal text-slate-500">Privacy Policy</StubNavItem>
+          <LanguageSwitcher />
+          <StubNavItem className="text-xs font-normal text-slate-500">{t("common.privacyPolicy")}</StubNavItem>
           <Link className="text-xs font-normal text-slate-500 hover:text-teal-600 hover:underline" to="/login">
-            Sign in
+            {t("nav.signIn")}
           </Link>
         </div>
       </footer>

@@ -1,9 +1,12 @@
 import { FormEvent, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { ApiError, apiPost } from "@/lib/api";
-import { PASSWORD_HINT, isPasswordValid } from "@/lib/passwordRules";
+import { getPasswordHint, isPasswordValid } from "@/lib/passwordRules";
 
 export default function ResetPasswordPage() {
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const token = useMemo(() => (searchParams.get("token") ?? "").trim(), [searchParams]);
   const tenantLabel = useMemo(() => searchParams.get("tenant") ?? "", [searchParams]);
@@ -18,11 +21,11 @@ export default function ResetPasswordPage() {
     e.preventDefault();
     if (!token) return;
     if (!isPasswordValid(password)) {
-      setErrorMessage(PASSWORD_HINT);
+      setErrorMessage(getPasswordHint());
       return;
     }
     if (password !== confirm) {
-      setErrorMessage("Passwords do not match.");
+      setErrorMessage(t("auth.resetPassword.passwordMismatch"));
       return;
     }
     setErrorMessage(null);
@@ -31,7 +34,7 @@ export default function ResetPasswordPage() {
       await apiPost("/api/v1/auth/reset-password", { token, newPassword: password });
       setDone(true);
     } catch (err) {
-      setErrorMessage(err instanceof ApiError ? err.message : "Reset failed. Request a new link.");
+      setErrorMessage(err instanceof ApiError ? err.message : t("auth.resetPassword.failed"));
     } finally {
       setSubmitting(false);
     }
@@ -39,12 +42,15 @@ export default function ResetPasswordPage() {
 
   if (!token) {
     return (
-      <div className="min-h-dvh flex flex-col items-center justify-center p-6 bg-slate-50">
+      <div className="min-h-dvh flex flex-col items-center justify-center p-6 bg-slate-50 relative">
+        <div className="absolute top-4 right-4 z-10">
+          <LanguageSwitcher />
+        </div>
         <div className="max-w-md bg-white border border-slate-200 rounded-xl p-8 shadow-sm">
-          <h1 className="font-h2 text-primary mb-2">Invalid reset link</h1>
-          <p className="text-slate-600 text-sm mb-6">Open the link from your email, or request a new reset.</p>
+          <h1 className="font-h2 text-primary mb-2">{t("auth.resetPassword.invalidTitle")}</h1>
+          <p className="text-slate-600 text-sm mb-6">{t("auth.resetPassword.invalidBody")}</p>
           <Link to="/forgot-password" className="text-primary font-semibold hover:underline">
-            Forgot password
+            {t("auth.resetPassword.forgotPasswordLink")}
           </Link>
         </div>
       </div>
@@ -53,16 +59,19 @@ export default function ResetPasswordPage() {
 
   if (done) {
     return (
-      <div className="min-h-dvh flex flex-col items-center justify-center p-6 bg-slate-50">
+      <div className="min-h-dvh flex flex-col items-center justify-center p-6 bg-slate-50 relative">
+        <div className="absolute top-4 right-4 z-10">
+          <LanguageSwitcher />
+        </div>
         <div className="max-w-md bg-white border border-slate-200 rounded-xl p-8 shadow-sm text-center">
           <span className="material-symbols-outlined text-5xl text-teal-600 mb-4">check_circle</span>
-          <h1 className="font-h2 text-primary mb-2">Password updated</h1>
-          <p className="text-slate-600 text-sm mb-6">You can sign in with your new password.</p>
+          <h1 className="font-h2 text-primary mb-2">{t("auth.resetPassword.successTitle")}</h1>
+          <p className="text-slate-600 text-sm mb-6">{t("auth.resetPassword.successBody")}</p>
           <Link
             to="/login"
             className="inline-flex items-center justify-center w-full bg-primary-container text-white font-semibold py-3 rounded-lg hover:opacity-90"
           >
-            Go to login
+            {t("auth.resetPassword.goToLogin")}
           </Link>
         </div>
       </div>
@@ -70,13 +79,16 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <div className="min-h-dvh flex flex-col items-center justify-center p-6 bg-slate-50">
+    <div className="min-h-dvh flex flex-col items-center justify-center p-6 bg-slate-50 relative">
+      <div className="absolute top-4 right-4 z-10">
+        <LanguageSwitcher />
+      </div>
       <div className="max-w-md w-full bg-white border border-slate-200 rounded-xl p-8 shadow-sm">
-        <h1 className="font-h2 text-primary mb-1">Set new password</h1>
+        <h1 className="font-h2 text-primary mb-1">{t("auth.resetPassword.title")}</h1>
         {tenantLabel ? (
-          <p className="text-xs text-slate-500 mb-4 font-mono">Tenant: {tenantLabel}</p>
+          <p className="text-xs text-slate-500 mb-4 font-mono">{t("common.tenantLabel", { code: tenantLabel })}</p>
         ) : (
-          <p className="text-sm text-slate-600 mb-4">Choose a strong password for your account.</p>
+          <p className="text-sm text-slate-600 mb-4">{t("auth.resetPassword.intro")}</p>
         )}
         <form className="space-y-4" onSubmit={handleSubmit}>
           {errorMessage && (
@@ -84,7 +96,7 @@ export default function ResetPasswordPage() {
           )}
           <div>
             <label className="block text-xs font-label-caps text-slate-500 mb-1 uppercase" htmlFor="np">
-              New password
+              {t("auth.resetPassword.newPassword")}
             </label>
             <input
               id="np"
@@ -95,11 +107,11 @@ export default function ResetPasswordPage() {
               autoComplete="new-password"
               required
             />
-            <p className="text-[11px] text-slate-500 mt-1">{PASSWORD_HINT}</p>
+            <p className="text-[11px] text-slate-500 mt-1">{getPasswordHint()}</p>
           </div>
           <div>
             <label className="block text-xs font-label-caps text-slate-500 mb-1 uppercase" htmlFor="cp">
-              Confirm
+              {t("auth.resetPassword.confirm")}
             </label>
             <input
               id="cp"
@@ -116,11 +128,11 @@ export default function ResetPasswordPage() {
             disabled={submitting || !isPasswordValid(password) || password !== confirm}
             className="w-full bg-primary-container text-white font-semibold py-3 rounded-lg disabled:opacity-50"
           >
-            {submitting ? "Updating…" : "Update password"}
+            {submitting ? t("auth.resetPassword.updating") : t("auth.resetPassword.update")}
           </button>
         </form>
         <Link to="/login" className="block text-center text-sm text-primary mt-6 hover:underline">
-          Back to login
+          {t("auth.resetPassword.backToLogin")}
         </Link>
       </div>
     </div>

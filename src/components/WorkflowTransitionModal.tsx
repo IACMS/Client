@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ApiError, apiPost, apiPut } from "@/lib/api";
 import {
   fetchRbacRoles,
@@ -75,6 +76,7 @@ export default function WorkflowTransitionModal({
   editTransition,
   onSaved,
 }: Props) {
+  const { t } = useTranslation();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [fromStepId, setFromStepId] = useState("");
@@ -172,7 +174,7 @@ export default function WorkflowTransitionModal({
     e.preventDefault();
     const n = name.trim();
     if (!n) {
-      setErrorMessage("Transition name is required.");
+      setErrorMessage(t("modals.workflow.nameRequired"));
       return;
     }
 
@@ -185,47 +187,47 @@ export default function WorkflowTransitionModal({
     if (!editTransition) {
       if (fromSource === "chain") {
         if (!chainTransitionId || !chainSel) {
-          setErrorMessage("Choose which transition this one chains after.");
+          setErrorMessage(t("modals.workflow.chooseChain"));
           return;
         }
       } else if (!fromStepId) {
-        setErrorMessage("Choose a from step.");
+        setErrorMessage(t("modals.workflow.chooseFromStep"));
         return;
       }
       if (toMode === "terminal") {
         if (!canAutoClose) {
-          setErrorMessage("Automatic closing transitions need exactly one final step in the workflow.");
+          setErrorMessage(t("modals.workflow.closingNeedsFinal"));
           return;
         }
       } else if (!toStepId) {
-        setErrorMessage("Choose a destination step.");
+        setErrorMessage(t("modals.workflow.chooseDestination"));
         return;
       }
     } else {
       if (!fromStepId) {
-        setErrorMessage("Choose a from step.");
+        setErrorMessage(t("modals.workflow.chooseFromStep"));
         return;
       }
       if (toMode === "terminal") {
         if (!canAutoClose) {
-          setErrorMessage("Automatic closing transitions need exactly one final step in the workflow.");
+          setErrorMessage(t("modals.workflow.closingNeedsFinal"));
           return;
         }
       } else if (!toStepId) {
-        setErrorMessage("Choose a destination step.");
+        setErrorMessage(t("modals.workflow.chooseDestination"));
         return;
       }
     }
 
     if (effFrom && resolvedToId && effFrom === resolvedToId) {
-      setErrorMessage("From and to steps must differ.");
+      setErrorMessage(t("modals.workflow.stepsMustDiffer"));
       return;
     }
 
     if (timeLimitType !== "NONE") {
       const amt = parseInt(timeLimitAmount.trim(), 10);
       if (!Number.isFinite(amt) || amt < 1) {
-        setErrorMessage("Enter a positive number for the time limit.");
+        setErrorMessage(t("modals.workflow.positiveTimeLimit"));
         return;
       }
     }
@@ -273,7 +275,7 @@ export default function WorkflowTransitionModal({
       handleClose();
     } catch (err) {
       setErrorMessage(
-        err instanceof ApiError ? err.message : editTransition ? "Failed to update transition." : "Failed to add transition.",
+        err instanceof ApiError ? err.message : editTransition ? t("modals.workflow.updateFailed") : t("modals.workflow.addFailed"),
       );
     } finally {
       setSubmitting(false);
@@ -296,9 +298,9 @@ export default function WorkflowTransitionModal({
       >
         <div className="p-4 border-b border-slate-100 flex justify-between items-center sticky top-0 bg-white z-10">
           <h2 id="wf-tr-title" className="font-h3 text-primary">
-            {editTransition ? "Edit transition" : "Add transition"}
+            {editTransition ? t("modals.workflow.editTransition") : t("modals.workflow.addTransition")}
           </h2>
-          <button type="button" onClick={handleClose} className="p-1 rounded hover:bg-slate-100" aria-label="Close">
+          <button type="button" onClick={handleClose} className="p-1 rounded hover:bg-slate-100" aria-label={t("common.close")}>
             <span className="material-symbols-outlined">close</span>
           </button>
         </div>
@@ -451,7 +453,7 @@ export default function WorkflowTransitionModal({
 
           <div>
             <label className="block text-xs font-semibold text-slate-600 mb-1" htmlFor="tr-desc">
-              Description <span className="font-normal text-slate-400">(optional)</span>
+              {t("common.description")} <span className="font-normal text-slate-400">({t("common.optional")})</span>
             </label>
             <input
               id="tr-desc"
@@ -475,7 +477,7 @@ export default function WorkflowTransitionModal({
               onChange={(e) => setRequiresComment(e.target.checked)}
               className="rounded text-primary"
             />
-            Require comment when taking this transition
+            Require formal letter when taking this transition
           </label>
           <div className="rounded-lg border border-slate-100 bg-slate-50/80 p-3 space-y-2">
             <label className="block text-xs font-semibold text-slate-600" htmlFor="tr-time-type">
@@ -539,14 +541,14 @@ export default function WorkflowTransitionModal({
               onClick={handleClose}
               className="flex-1 py-2.5 rounded-lg border border-slate-200 font-semibold text-slate-700 hover:bg-slate-50"
             >
-              Cancel
+              {t("common.cancel")}
             </button>
             <button
               type="submit"
               disabled={submitting || steps.length < 2}
               className="flex-1 bg-primary text-white py-2.5 rounded-lg font-semibold hover:bg-primary-container disabled:opacity-50"
             >
-              {submitting ? "Saving…" : editTransition ? "Save transition" : "Add transition"}
+              {submitting ? t("modals.workflow.saving") : t("modals.workflow.saveTransition")}
             </button>
           </div>
         </form>

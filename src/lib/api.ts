@@ -7,11 +7,13 @@ const REFRESH_KEY = "iacms.refreshToken";
 
 export function getApiBase(): string {
   const raw = import.meta.env.VITE_API_URL;
-  const base = (typeof raw === "string" ? raw : "").replace(/\/$/, "");
-  if (!base) {
-    return "http://localhost:3000";
+  if (typeof raw === "string" && raw.trim()) {
+    // Explicit override (e.g. production URL or remote dev server)
+    return raw.replace(/\/$/, "");
   }
-  return base;
+  // No URL set — use relative paths so the Vite dev proxy (or any same-origin
+  // reverse-proxy in staging/production) handles routing without CORS issues.
+  return "";
 }
 
 export class ApiError extends Error {
@@ -37,6 +39,21 @@ export function isPasswordChangeRequiredError(body: unknown): boolean {
     if (code === "PASSWORD_CHANGE_REQUIRED") return true;
   }
   return false;
+}
+
+/** User-facing hint when microservices report Prisma schema drift. */
+export function isSchemaMismatchError(body: unknown): boolean {
+  if (!body || typeof body !== "object") return false;
+  const o = body as Record<string, unknown>;
+  const err = o.error;
+  if (err && typeof err === "object") {
+    return (err as { code?: string }).code === "SCHEMA_MISMATCH";
+  }
+  return false;
+}
+
+export function schemaMismatchHint(): string {
+  return "Database schema is out of date. From the IACMS folder run: npx prisma migrate deploy (or reset dev DB per README), then restart services.";
 }
 
 function extractErrorMessage(body: unknown): string {
@@ -72,7 +89,10 @@ export function getStoredAccessToken(): string | null {
 }
 
 /** JWTs from `session/login` or `auth/register` — required for gateway `/api/v1/auth/profile`, etc. */
-export function setStoredTokens(access: string | null, refresh: string | null): void {
+export function setStoredTokens(
+  access: string | null,
+  refresh: string | null,
+): void {
   try {
     if (access) localStorage.setItem(ACCESS_KEY, access);
     else localStorage.removeItem(ACCESS_KEY);
@@ -127,7 +147,10 @@ async function refreshAccessToken(): Promise<boolean> {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refreshToken: rt }),
     });
-    const data = (await res.json().catch(() => null)) as { accessToken?: string; refreshToken?: string } | null;
+    const data = (await res.json().catch(() => null)) as {
+      accessToken?: string;
+      refreshToken?: string;
+    } | null;
     if (!res.ok || !data?.accessToken) return false;
     setStoredTokens(data.accessToken, data.refreshToken ?? rt);
     return true;
@@ -154,12 +177,19 @@ function isPublicAuthPath(path: string): boolean {
 }
 
 /** Gateway fetch with session cookies + optional Bearer JWT. Handles refresh-on-401 globally. */
-export async function apiFetch(path: string, init: RequestInit = {}): Promise<unknown> {
+export async function apiFetch(
+  path: string,
+  init: RequestInit = {},
+): Promise<unknown> {
   const base = getApiBase();
   const url = `${base}${path.startsWith("/") ? path : `/${path}`}`;
   const buildHeaders = (): Headers => {
     const h = new Headers(init.headers);
-    if (!h.has("Content-Type") && init.body != null && !(init.body instanceof FormData)) {
+    if (
+      !h.has("Content-Type") &&
+      init.body != null &&
+      !(init.body instanceof FormData)
+    ) {
       h.set("Content-Type", "application/json");
     }
     const token = getStoredAccessToken();
@@ -169,12 +199,20 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<un
     return h;
   };
 
-  let res = await fetch(url, { credentials: "include", ...init, headers: buildHeaders() });
+  let res = await fetch(url, {
+    credentials: "include",
+    ...init,
+    headers: buildHeaders(),
+  });
 
   if (res.status === 401 && !isPublicAuthPath(path)) {
     const refreshed = await refreshAccessToken();
     if (refreshed) {
-      res = await fetch(url, { credentials: "include", ...init, headers: buildHeaders() });
+      res = await fetch(url, {
+        credentials: "include",
+        ...init,
+        headers: buildHeaders(),
+      });
     } else if (getStoredAccessToken() || getRefreshToken()) {
       // Had a token, refresh failed → session is gone.
       authBus.emit("expired");
@@ -200,30 +238,60 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<un
  */
 export type ApiCallOptions = { signal?: AbortSignal };
 
-export async function apiGet(path: string, opts: ApiCallOptions = {}): Promise<unknown> {
+export async function apiGet(
+  path: string,
+  opts: ApiCallOptions = {},
+): Promise<unknown> {
   return apiFetch(path, { method: "GET", signal: opts.signal });
 }
 
-export async function apiPost(path: string, json: unknown, opts: ApiCallOptions = {}): Promise<unknown> {
-  return apiFetch(path, { method: "POST", body: JSON.stringify(json), signal: opts.signal });
+export async function apiPost(
+  path: string,
+  json: unknown,
+  opts: ApiCallOptions = {},
+): Promise<unknown> {
+  return apiFetch(path, {
+    method: "POST",
+    body: JSON.stringify(json),
+    signal: opts.signal,
+  });
 }
 
-export async function apiPatch(path: string, json: unknown, opts: ApiCallOptions = {}): Promise<unknown> {
-  return apiFetch(path, { method: "PATCH", body: JSON.stringify(json), signal: opts.signal });
+export async function apiPatch(
+  path: string,
+  json: unknown,
+  opts: ApiCallOptions = {},
+): Promise<unknown> {
+  return apiFetch(path, {
+    method: "PATCH",
+    body: JSON.stringify(json),
+    signal: opts.signal,
+  });
 }
 
-export async function apiPut(path: string, json: unknown, opts: ApiCallOptions = {}): Promise<unknown> {
-  return apiFetch(path, { method: "PUT", body: JSON.stringify(json), signal: opts.signal });
+export async function apiPut(
+  path: string,
+  json: unknown,
+  opts: ApiCallOptions = {},
+): Promise<unknown> {
+  return apiFetch(path, {
+    method: "PUT",
+    body: JSON.stringify(json),
+    signal: opts.signal,
+  });
 }
 
-export async function apiDelete(path: string, opts: ApiCallOptions = {}): Promise<unknown> {
+export async function apiDelete(
+  path: string,
+  opts: ApiCallOptions = {},
+): Promise<unknown> {
   return apiFetch(path, { method: "DELETE", signal: opts.signal });
 }
 
 /** True when an error came from a cancelled fetch (caller can ignore). */
 export function isAbortError(e: unknown): boolean {
   return (
-    e instanceof DOMException && e.name === "AbortError" ||
+    (e instanceof DOMException && e.name === "AbortError") ||
     (e instanceof Error && e.name === "AbortError")
   );
 }

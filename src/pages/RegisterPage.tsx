@@ -1,14 +1,17 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { StubNavItem } from "@/components/StubNavItem";
 import { useSession } from "@/context/SessionContext";
 import { ApiError, apiPost, persistAuthTokensFromResponse } from "@/lib/api";
-import { PASSWORD_HINT, isPasswordValid } from "@/lib/passwordRules";
+import { getPasswordHint, isPasswordValid } from "@/lib/passwordRules";
 
 const HERO_IMG =
   "https://lh3.googleusercontent.com/aida-public/AB6AXuAc7CUm4yqRRDQPGCDqcj9F-k4mKrmhDt60OlmT3antKoRgKyYfv20a4BjvxkfITydqlHC1Do6K66sm6L4fTiY6tqLWtvNWq05b9eA00ajNWrRPW8QMiddG4DWioBFtp8qk-Rh3TtHYvssGTL2TDxBjG0cpVMRjN18bFPc8PWvyvtD5q2_N0XHsSUgP69bCfI34Im2UxQ7OhlAKMNEyiEvbcyzzBsq9NdmQPYoimSgpoprOztv6XXRZnqVirG1igmgB5P03-0PtN1U";
 
 export default function RegisterPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { refresh, user, status } = useSession();
 
@@ -37,15 +40,15 @@ export default function RegisterPage() {
     const fn = firstName.trim();
     const ln = lastName.trim();
     if (!fn || !ln || !em || !tc || !password) {
-      setErrorMessage("Fill in all required fields.");
+      setErrorMessage(t("auth.register.requiredFields"));
       return;
     }
     if (!isPasswordValid(password)) {
-      setErrorMessage(PASSWORD_HINT);
+      setErrorMessage(getPasswordHint());
       return;
     }
     if (password !== confirmPassword) {
-      setErrorMessage("Passwords do not match.");
+      setErrorMessage(t("auth.register.passwordMismatch"));
       return;
     }
     setErrorMessage(null);
@@ -74,10 +77,10 @@ export default function RegisterPage() {
           ? err.message
           : err instanceof Error
             ? err.message
-            : "Registration failed.";
+            : t("auth.register.failed");
       setErrorMessage(
         message.includes("fetch") || message === "Failed to fetch"
-          ? "Cannot reach the API gateway. Check VITE_API_URL and that the backend is running."
+          ? t("auth.apiUnreachableShort")
           : message,
       );
     } finally {
@@ -93,18 +96,19 @@ export default function RegisterPage() {
             IACMS
           </Link>
           <div className="h-6 w-px bg-slate-200 mx-2" />
-          <span className="font-label-caps text-on-surface-variant uppercase tracking-widest">Self-service registration</span>
+          <span className="font-label-caps text-on-surface-variant uppercase tracking-widest">{t("auth.register.header")}</span>
         </div>
         <div className="flex items-center gap-4">
+          <LanguageSwitcher />
           <button
             type="button"
             className="text-slate-600 hover:text-teal-700 transition-colors flex items-center gap-2 font-body-sm"
           >
             <span className="material-symbols-outlined text-[20px]">help_outline</span>
-            Support
+            {t("common.support")}
           </button>
           <Link to="/login" className="font-body-sm text-primary-container font-semibold hover:underline">
-            Sign in
+            {t("nav.signIn")}
           </Link>
         </div>
       </header>
@@ -114,10 +118,9 @@ export default function RegisterPage() {
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-gutter">
               <div className="lg:col-span-5 space-y-lg">
                 <div className="bg-primary-container p-lg rounded-xl text-on-primary">
-                  <h1 className="font-h1 text-h1 mb-md text-white">Join your organization on IACMS.</h1>
+                  <h1 className="font-h1 text-h1 mb-md text-white">{t("auth.register.heroTitle")}</h1>
                   <p className="font-body-lg text-body-lg text-on-primary-container mb-xl">
-                    Register with an existing tenant code issued by your administrator. You will be able to sign in
-                    immediately after registration.
+                    {t("auth.register.heroBody")}
                   </p>
                   <div className="space-y-md">
                     <div className="flex items-start gap-md">
@@ -127,9 +130,9 @@ export default function RegisterPage() {
                         </span>
                       </div>
                       <div>
-                        <h4 className="font-h3 text-body-md font-bold">Verify by email</h4>
+                        <h4 className="font-h3 text-body-md font-bold">{t("auth.register.verifyEmailTitle")}</h4>
                         <p className="font-body-sm text-on-primary-container">
-                          A verification email is sent when the notification service is configured.
+                          {t("auth.register.verifyEmailBody")}
                         </p>
                       </div>
                     </div>
@@ -140,9 +143,9 @@ export default function RegisterPage() {
                         </span>
                       </div>
                       <div>
-                        <h4 className="font-h3 text-body-md font-bold">Tenant-scoped account</h4>
+                        <h4 className="font-h3 text-body-md font-bold">{t("auth.register.tenantScopedTitle")}</h4>
                         <p className="font-body-sm text-on-primary-container">
-                          Your account is created under the tenant matching your organization code.
+                          {t("auth.register.tenantScopedBody")}
                         </p>
                       </div>
                     </div>
@@ -152,23 +155,20 @@ export default function RegisterPage() {
                   <img alt="" className="w-full h-full object-cover" src={HERO_IMG} />
                   <div className="absolute inset-0 bg-gradient-to-t from-primary/60 to-transparent" />
                   <div className="absolute bottom-md left-md right-md">
-                    <p className="text-white font-body-sm italic">
-                      &quot;Modernizing the standard of government case management through secure, rapid agency
-                      integration.&quot;
-                    </p>
+                    <p className="text-white font-body-sm italic">{t("auth.register.quote")}</p>
                   </div>
                 </div>
               </div>
               <div className="lg:col-span-7">
                 <div className="bg-white p-lg rounded-xl border border-outline-variant shadow-sm">
                   <div className="mb-lg border-b border-surface-variant pb-md">
-                    <h2 className="font-h2 text-h2 text-primary">Create account</h2>
+                    <h2 className="font-h2 text-h2 text-primary">{t("auth.register.formTitle")}</h2>
                     <p className="font-body-sm text-on-surface-variant mt-xs">
-                      Use the tenant code provided by your agency administrator (e.g. TEST-ORG).{" "}
+                      {t("auth.register.formIntro")}{" "}
                       <Link to="/register-organization" className="text-primary font-semibold hover:underline">
-                        Register a new organization
+                        {t("auth.register.newOrganization")}
                       </Link>{" "}
-                      if you are setting up IACMS for your agency.
+                      {t("auth.register.newOrganizationHint")}
                     </p>
                   </div>
                   <form className="space-y-lg" onSubmit={handleSubmit}>
@@ -177,13 +177,13 @@ export default function RegisterPage() {
                     )}
                     {done && (
                       <div className="p-md bg-teal-50 border border-teal-200 rounded-lg text-teal-800 text-sm">
-                        Account created. Redirecting…
+                        {t("auth.register.success")}
                       </div>
                     )}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-lg">
                       <div className="space-y-sm">
                         <label className="font-label-caps text-on-surface-variant block uppercase tracking-wider" htmlFor="fn">
-                          First name
+                          {t("auth.register.firstName")}
                         </label>
                         <input
                           id="fn"
@@ -196,7 +196,7 @@ export default function RegisterPage() {
                       </div>
                       <div className="space-y-sm">
                         <label className="font-label-caps text-on-surface-variant block uppercase tracking-wider" htmlFor="ln">
-                          Last name
+                          {t("auth.register.lastName")}
                         </label>
                         <input
                           id="ln"
@@ -210,13 +210,13 @@ export default function RegisterPage() {
                     </div>
                     <div className="space-y-sm">
                       <label className="font-label-caps text-on-surface-variant block uppercase tracking-wider" htmlFor="em">
-                        Work email
+                        {t("auth.register.workEmail")}
                       </label>
                       <input
                         id="em"
                         type="email"
                         className="w-full rounded-lg border border-outline-variant focus:border-primary focus:ring-2 focus:ring-primary/20 text-body-md py-md px-md"
-                        placeholder="official@agency.gov"
+                        placeholder={t("auth.register.emailPlaceholder")}
                         value={email}
                         onChange={(ev) => setEmail(ev.target.value)}
                         autoComplete="email"
@@ -225,12 +225,12 @@ export default function RegisterPage() {
                     </div>
                     <div className="space-y-sm">
                       <label className="font-label-caps text-on-surface-variant block uppercase tracking-wider" htmlFor="tc">
-                        Tenant code
+                        {t("auth.register.tenantCode")}
                       </label>
                       <input
                         id="tc"
                         className="w-full rounded-lg border border-outline-variant focus:border-primary focus:ring-2 focus:ring-primary/20 text-body-md py-md px-md font-mono uppercase"
-                        placeholder="e.g. TEST-ORG"
+                        placeholder={t("auth.register.tenantCodePlaceholder")}
                         value={tenantCode}
                         onChange={(ev) => setTenantCode(ev.target.value)}
                         autoComplete="organization"
@@ -240,7 +240,7 @@ export default function RegisterPage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-lg">
                       <div className="space-y-sm">
                         <label className="font-label-caps text-on-surface-variant block uppercase tracking-wider" htmlFor="pw">
-                          Password
+                          {t("auth.register.password")}
                         </label>
                         <input
                           id="pw"
@@ -251,11 +251,11 @@ export default function RegisterPage() {
                           autoComplete="new-password"
                           required
                         />
-                        <p className="font-body-sm text-on-surface-variant">{PASSWORD_HINT}</p>
+                        <p className="font-body-sm text-on-surface-variant">{getPasswordHint()}</p>
                       </div>
                       <div className="space-y-sm">
                         <label className="font-label-caps text-on-surface-variant block uppercase tracking-wider" htmlFor="pwc">
-                          Confirm password
+                          {t("auth.register.confirmPassword")}
                         </label>
                         <input
                           id="pwc"
@@ -278,12 +278,11 @@ export default function RegisterPage() {
                         />
                       </div>
                       <span className="font-body-sm text-on-surface-variant leading-tight">
-                        I agree to the{" "}
+                        {t("auth.register.agreement")}{" "}
                         <StubNavItem className="inline text-primary font-bold underline underline-offset-2 align-baseline leading-tight">
-                          Inter-Agency Data Sharing Agreement
+                          {t("auth.register.dataSharingAgreement")}
                         </StubNavItem>
-                        . This includes adherence to federal privacy standards, data handling protocols, and
-                        non-disclosure requirements.
+                        {t("auth.register.agreementExtra")}
                       </span>
                     </label>
                     <div className="pt-md border-t border-surface-variant">
@@ -292,7 +291,7 @@ export default function RegisterPage() {
                         className="w-full bg-primary-container text-white py-lg rounded-lg font-h3 hover:opacity-90 transition-all flex items-center justify-center gap-md disabled:opacity-50 disabled:pointer-events-none"
                         type="submit"
                       >
-                        {submitting ? "Creating account…" : "Create account"}
+                        {submitting ? t("auth.register.creating") : t("auth.register.createAccount")}
                         <span className="material-symbols-outlined">send</span>
                       </button>
                     </div>
@@ -306,15 +305,15 @@ export default function RegisterPage() {
       <footer className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex flex-col md:flex-row justify-between items-center w-full py-4 sm:py-6 px-gutter shrink-0">
         <div className="mb-4 md:mb-0">
           <p className="text-xs font-normal Inter text-slate-500 dark:text-slate-400">
-            © 2024 Government Case Management System. Official Use Only.
+            {t("auth.register.footer")}
           </p>
         </div>
         <div className="flex gap-6 flex-wrap items-center">
-          <StubNavItem className="text-xs font-normal Inter text-slate-500 dark:text-slate-400">Privacy Policy</StubNavItem>
-          <StubNavItem className="text-xs font-normal Inter text-slate-500 dark:text-slate-400">Terms of Service</StubNavItem>
-          <StubNavItem className="text-xs font-normal Inter text-slate-500 dark:text-slate-400">Accessibility</StubNavItem>
+          <StubNavItem className="text-xs font-normal Inter text-slate-500 dark:text-slate-400">{t("common.privacyPolicy")}</StubNavItem>
+          <StubNavItem className="text-xs font-normal Inter text-slate-500 dark:text-slate-400">{t("common.termsOfService")}</StubNavItem>
+          <StubNavItem className="text-xs font-normal Inter text-slate-500 dark:text-slate-400">{t("common.accessibility")}</StubNavItem>
           <Link className="text-xs font-normal Inter text-slate-500 dark:text-slate-400 hover:text-teal-600 hover:underline" to="/login">
-            Sign in
+            {t("nav.signIn")}
           </Link>
         </div>
       </footer>

@@ -1,4 +1,5 @@
 import { NavLink } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useIsAdmin } from "@/context/SessionContext";
 import { usePermissions } from "@/permissions/usePermissions";
 import type { Permission } from "@/permissions/roles";
@@ -6,24 +7,19 @@ import type { Permission } from "@/permissions/roles";
 type SidebarLinkItem = {
   placeholder?: false;
   to: string;
-  label: string;
+  labelKey: string;
   icon: string;
   end?: boolean;
-  /** If true, also visible when `isPlatformOperator` (session has exact `platform:manage_tenants`). */
   orPlatformOperator?: boolean;
-  /** Same check as `<RequireAdmin />` — exact session perms only (not `*` / `users:*` wildcards). */
   adminOnly?: boolean;
-  /** Hide the link unless the user holds this permission (unless anyOf/allOf are set). Ignored when adminOnly is true. */
   permission?: Permission;
-  /** OR — show when any of these match `permissionAllowed` semantics. */
   anyOf?: Permission[];
-  /** AND — show only when all match. */
   allOf?: Permission[];
 };
 
 type SidebarPlaceholderItem = {
   placeholder: true;
-  label: string;
+  labelKey: string;
   icon: string;
 };
 
@@ -48,34 +44,37 @@ function linkVisible(
 }
 
 const items: SidebarItem[] = [
-  // Intentionally ungated: home for every signed-in user; dashboard API slices may return empty per RBAC.
-  { to: "/dashboard", label: "Dashboard", icon: "dashboard", end: true },
-  // Cases list + detail use case APIs gated as cases:read.
-  { to: "/cases", label: "Cases", icon: "work", end: false, permission: "cases:read" },
-  // Workflow list matches gateway GET /workflows; designer allows workflows:read (view) or update (edit).
-  { to: "/workflows", label: "Workflows", icon: "account_tree", end: false, permission: "workflows:read" },
-  // Matches <RequireAdmin /> — must use useIsAdmin, not can(), so wildcards don’t widen access vs the route.
-  { to: "/users", label: "Users", icon: "group", end: false, adminOnly: true },
-  // Tenant staff: cases + tenant APIs. Platform operators: directory only (no case/workflow APIs).
-  { to: "/agencies", label: "Agencies", icon: "account_balance", end: false, allOf: ["cases:read", "tenants:read"], orPlatformOperator: true },
+  { to: "/dashboard", labelKey: "nav.dashboard", icon: "dashboard", end: true },
+  { to: "/cases", labelKey: "nav.cases", icon: "work", end: false, permission: "cases:read" },
+  { to: "/referrals", labelKey: "nav.referrals", icon: "move_to_inbox", end: false, permission: "referrals:read" },
+  { to: "/workflows", labelKey: "nav.workflows", icon: "account_tree", end: false, permission: "workflows:read" },
+  { to: "/users", labelKey: "nav.users", icon: "group", end: false, adminOnly: true },
+  {
+    to: "/agencies",
+    labelKey: "nav.agencies",
+    icon: "account_balance",
+    end: false,
+    allOf: ["cases:read", "tenants:read"],
+    orPlatformOperator: true,
+  },
   {
     to: "/api-health",
-    label: "API",
+    labelKey: "nav.api",
     icon: "lan",
     end: false,
     permission: "platform:manage_tenants",
   },
-  { placeholder: true, label: "Tasks", icon: "assignment" },
-  { placeholder: true, label: "Reports", icon: "assessment" },
-  // Same guard as /users (<RequireAdmin />).
+  { to: "/audit", labelKey: "nav.audit", icon: "history", end: false, permission: "audit:read" },
+  { to: "/chat", labelKey: "nav.chat", icon: "chat", end: false, permission: "cases:read" },
+  { to: "/tasks", labelKey: "nav.tasks", icon: "assignment", end: false, permission: "cases:read" },
+  { to: "/reports", labelKey: "nav.reports", icon: "assessment", end: false, permission: "cases:read" },
   {
     to: "/settings/tenant",
-    label: "Settings",
+    labelKey: "nav.settings",
     icon: "settings",
     end: false,
     adminOnly: true,
   },
-  { placeholder: true, label: "Audit", icon: "history" },
 ];
 
 function linkClassName(isActive: boolean, placeholder?: boolean): string {
@@ -93,6 +92,7 @@ function linkClassName(isActive: boolean, placeholder?: boolean): string {
 type Variant = "dashboard" | "cases";
 
 export default function PortalSidebar({ variant }: { variant: Variant }) {
+  const { t } = useTranslation();
   const isDash = variant === "dashboard";
   const { isAdmin, isSystemAdmin: isPlatformOperator } = useIsAdmin();
   const { can, anyOf, allOf } = usePermissions();
@@ -111,10 +111,8 @@ export default function PortalSidebar({ variant }: { variant: Variant }) {
               <span className="material-symbols-outlined text-white">account_balance</span>
             </div>
             <div>
-              <h2 className="font-inter text-sm font-bold text-primary leading-tight">
-                Case Management
-              </h2>
-              <p className="font-inter text-[10px] text-slate-500 uppercase tracking-wider">Institutional Portal</p>
+              <h2 className="font-inter text-sm font-bold text-primary leading-tight">{t("portal.caseManagement")}</h2>
+              <p className="font-inter text-[10px] text-slate-500 uppercase tracking-wider">{t("portal.institutionalPortal")}</p>
             </div>
           </>
         ) : (
@@ -123,8 +121,8 @@ export default function PortalSidebar({ variant }: { variant: Variant }) {
               <span className="material-symbols-outlined text-white">account_balance</span>
             </div>
             <div>
-              <div className="font-h3 text-sm font-bold text-primary">Case Management</div>
-              <div className="font-body-sm text-xs text-slate-500">Institutional Portal</div>
+              <div className="font-h3 text-sm font-bold text-primary">{t("portal.caseManagement")}</div>
+              <div className="font-body-sm text-xs text-slate-500">{t("portal.institutionalPortal")}</div>
             </div>
           </div>
         )}
@@ -132,14 +130,14 @@ export default function PortalSidebar({ variant }: { variant: Variant }) {
       <nav className="flex flex-col gap-1 flex-1">
         {visibleItems.map((item) =>
           item.placeholder === true ? (
-            <span key={item.label} title="Coming soon" className={linkClassName(false, true)}>
+            <span key={item.labelKey} title={t("common.comingSoon")} className={linkClassName(false, true)}>
               <span className="material-symbols-outlined">{item.icon}</span>
-              {item.label}
+              {t(item.labelKey)}
             </span>
           ) : (
-            <NavLink key={item.label} to={item.to} end={item.end} className={({ isActive }) => linkClassName(isActive)}>
+            <NavLink key={item.labelKey} to={item.to} end={item.end} className={({ isActive }) => linkClassName(isActive)}>
               <span className="material-symbols-outlined">{item.icon}</span>
-              {item.label}
+              {t(item.labelKey)}
             </NavLink>
           ),
         )}

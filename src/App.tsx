@@ -24,6 +24,11 @@ import NotFoundPage from "./pages/NotFoundPage";
 import WorkflowsPage from "./pages/WorkflowsPage";
 import WorkflowDesignerPage from "./pages/WorkflowDesignerPage";
 import UsersPage from "./pages/UsersPage";
+import ReferralsPage from "./pages/ReferralsPage";
+import AuditPage from "./pages/AuditPage";
+import TasksPage from "./pages/TasksPage";
+import ReportsPage from "./pages/ReportsPage";
+import ChatPage from "./pages/ChatPage";
 import TenantSettingsPage from "./pages/TenantSettingsPage";
 import { useSession } from "./context/SessionContext";
 import { useEffect } from "react";
@@ -60,7 +65,18 @@ export default function App() {
       <Route element={<RequireAuth />}>
         <Route element={<DashboardLayout />}>
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route element={<RequireRole permission="cases:read" />}>
+            <Route path="/tasks" element={<TasksPage />} />
+            <Route path="/reports" element={<ReportsPage />} />
+            <Route path="/chat" element={<ChatPage />} />
+          </Route>
           <Route path="/settings" element={<SettingsPage />} />
+          <Route element={<RequireRole permission="referrals:read" />}>
+            <Route path="/referrals" element={<ReferralsPage />} />
+          </Route>
+          <Route element={<RequireRole permission="audit:read" />}>
+            <Route path="/audit" element={<AuditPage />} />
+          </Route>
           <Route element={<RequireRole permission="platform:manage_tenants" />}>
             <Route path="/api-health" element={<ApiDiagnosticsPage />} />
           </Route>

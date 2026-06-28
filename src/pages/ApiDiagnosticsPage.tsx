@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { ApiError, apiGet } from "@/lib/api";
 
 type PlatformProbe = {
@@ -18,6 +19,7 @@ type PlatformPayload = {
 };
 
 export default function ApiDiagnosticsPage() {
+  const { t } = useTranslation();
   const [probes, setProbes] = useState<PlatformProbe[]>([]);
   const [checkedAt, setCheckedAt] = useState<string | null>(null);
   const [gatewayOk, setGatewayOk] = useState<boolean | null>(null);
@@ -41,12 +43,12 @@ export default function ApiDiagnosticsPage() {
           ? e.message
           : e instanceof Error
             ? e.message
-            : "Could not load service probes.",
+            : t("api.loadFailed"),
       );
     } finally {
       setRunning(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void run();
@@ -56,14 +58,14 @@ export default function ApiDiagnosticsPage() {
     <div className="p-gutter max-w-4xl space-y-6 pb-12">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-h2 text-primary">API &amp; services</h1>
+          <h1 className="font-h2 text-primary">{t("api.title")}</h1>
           <p className="text-sm text-slate-600 mt-1 max-w-2xl">
-            Platform view of the API gateway and each microservice&apos;s{" "}
-            <code className="text-xs bg-slate-100 px-1 rounded">/health</code> endpoint. This does not use your personal
-            case or workflow permissions — it only checks that the gateway can reach each service.
+            {t("api.subtitle")}
           </p>
           {checkedAt ? (
-            <p className="text-xs text-slate-500 mt-2">Last check: {new Date(checkedAt).toLocaleString()}</p>
+            <p className="text-xs text-slate-500 mt-2">
+              {t("api.lastCheck", { date: new Date(checkedAt).toLocaleString() })}
+            </p>
           ) : null}
         </div>
         <button
@@ -72,7 +74,7 @@ export default function ApiDiagnosticsPage() {
           onClick={() => void run()}
           className="text-sm font-semibold px-4 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-50"
         >
-          {running ? "Running…" : "Run again"}
+          {running ? t("api.runAgain") : t("api.runAgainIdle")}
         </button>
       </div>
 
@@ -82,8 +84,8 @@ export default function ApiDiagnosticsPage() {
             gatewayOk ? "bg-teal-50 border-teal-200 text-teal-900" : "bg-slate-50 border-slate-200 text-slate-700"
           }`}
         >
-          <span className="font-semibold">Gateway</span>
-          {gatewayOk ? " — reporting; downstream rows show each service." : " — status partial or unknown."}
+          <span className="font-semibold">{t("agencies.networkHealth.gateway")}</span>
+          {gatewayOk ? ` ${t("api.gatewayReporting")}` : ` ${t("api.gatewayPartial")}`}
         </div>
       )}
 
@@ -95,17 +97,17 @@ export default function ApiDiagnosticsPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-200 text-left">
-              <th className="px-4 py-3 font-semibold text-slate-700">Service</th>
-              <th className="px-4 py-3 font-semibold text-slate-700">Health URL</th>
-              <th className="px-4 py-3 font-semibold text-slate-700">HTTP</th>
-              <th className="px-4 py-3 font-semibold text-slate-700">Result</th>
+              <th className="px-4 py-3 font-semibold text-slate-700">{t("api.table.service")}</th>
+              <th className="px-4 py-3 font-semibold text-slate-700">{t("api.table.healthUrl")}</th>
+              <th className="px-4 py-3 font-semibold text-slate-700">{t("api.table.http")}</th>
+              <th className="px-4 py-3 font-semibold text-slate-700">{t("api.table.result")}</th>
             </tr>
           </thead>
           <tbody>
             {probes.length === 0 && !running && !loadError ? (
               <tr>
                 <td colSpan={4} className="px-4 py-6 text-slate-500 text-center">
-                  No probe data yet.
+                  {t("api.noProbes")}
                 </td>
               </tr>
             ) : null}
@@ -122,10 +124,10 @@ export default function ApiDiagnosticsPage() {
                 </td>
                 <td className="px-4 py-3">
                   {r.ok ? (
-                    <span className="text-teal-700 font-medium">Reachable</span>
+                    <span className="text-teal-700 font-medium">{t("api.reachable")}</span>
                   ) : (
                     <span className="text-red-700">
-                      Unreachable or unhealthy
+                      {t("api.unreachable")}
                       {r.error ? (
                         <span className="block text-xs text-slate-600 font-normal mt-0.5">{r.error}</span>
                       ) : null}
@@ -140,7 +142,7 @@ export default function ApiDiagnosticsPage() {
 
       <p className="text-sm text-slate-600">
         <Link to="/dashboard" className="text-primary font-semibold hover:underline">
-          Back to dashboard
+          {t("api.backToDashboard")}
         </Link>
       </p>
     </div>

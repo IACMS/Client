@@ -64,12 +64,15 @@ export function useWorkflow(id: string | undefined): UseWorkflowResult {
       if (!id) return;
       setLoadError(null);
       try {
-        const data = (await apiGet(`/api/v1/workflows/${encodeURIComponent(id)}/full`, { signal })) as {
-          workflow?: ApiWorkflow;
-        };
+        const data = (await apiGet(`/api/v1/workflows/${encodeURIComponent(id)}/full`, { signal })) as
+          | ApiWorkflow
+          | { workflow?: ApiWorkflow };
         if (signal?.aborted) return;
-        const wf = data?.workflow;
-        if (!wf || !Array.isArray(wf.steps) || !Array.isArray(wf.transitions)) {
+        const wf =
+          data && typeof data === "object" && "workflow" in data && data.workflow
+            ? data.workflow
+            : (data as ApiWorkflow);
+        if (!wf?.id || !Array.isArray(wf.steps) || !Array.isArray(wf.transitions)) {
           setLoadError("Invalid response from server (missing workflow steps).");
           setWorkflow(null);
           setLoadState("error");

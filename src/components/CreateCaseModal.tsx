@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { ApiError, apiGet, apiPost } from "@/lib/api";
 
 type WorkflowRow = { id: string; name: string; key?: string; version?: number; status?: string; isActive?: boolean };
@@ -14,12 +15,13 @@ type Props = {
 };
 
 export default function CreateCaseModal({ open, onClose, tenantId, userId: _userId, onCreated }: Props) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [type, setType] = useState("internal");
   const [priority, setPriority] = useState("normal");
-  const [workflowId, setWorkflowId] = useState("");
+  const [workflowKey, setWorkflowKey] = useState("");
   const [workflows, setWorkflows] = useState<WorkflowRow[]>([]);
   const [loadingWf, setLoadingWf] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -55,7 +57,7 @@ export default function CreateCaseModal({ open, onClose, tenantId, userId: _user
       setDescription("");
       setType("internal");
       setPriority("normal");
-      setWorkflowId("");
+      setWorkflowKey("");
       setError(null);
     }
   }, [open]);
@@ -64,22 +66,22 @@ export default function CreateCaseModal({ open, onClose, tenantId, userId: _user
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    const t = title.trim();
-    if (!t) {
-      setError("Title is required.");
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle) {
+      setError(t("cases.createModal.titleRequired"));
       return;
     }
-    const wf = workflowId.trim();
-    if (!wf) {
-      setError("Select a published workflow. Cases are created on a workflow with an initial step.");
+    const wfKey = workflowKey.trim();
+    if (!wfKey) {
+      setError(t("cases.createModal.workflowRequired"));
       return;
     }
     setError(null);
     setSubmitting(true);
     try {
       const body: Record<string, string> = {
-        workflowId: wf,
-        title: t,
+        workflowKey: wfKey,
+        title: trimmedTitle,
         type: type.trim() || "internal",
         priority: priority.trim() || "normal",
       };
@@ -96,11 +98,11 @@ export default function CreateCaseModal({ open, onClose, tenantId, userId: _user
       const msg =
         err instanceof ApiError
           ? err.status === 403
-            ? "You don’t have permission to create cases (RBAC: cases:create)."
+            ? t("cases.createModal.noPermission")
             : err.message
           : err instanceof Error
             ? err.message
-            : "Could not create case.";
+            : t("cases.createModal.failed");
       setError(msg);
     } finally {
       setSubmitting(false);
@@ -123,13 +125,13 @@ export default function CreateCaseModal({ open, onClose, tenantId, userId: _user
       >
         <div className="p-4 border-b border-slate-100 flex justify-between items-center">
           <h2 id="create-case-title" className="font-h3 text-primary">
-            Create case
+            {t("cases.createModal.title")}
           </h2>
           <button
             type="button"
             onClick={onClose}
             className="p-1 rounded hover:bg-slate-100 text-slate-600"
-            aria-label="Close"
+            aria-label={t("common.close")}
           >
             <span className="material-symbols-outlined">close</span>
           </button>
@@ -140,7 +142,7 @@ export default function CreateCaseModal({ open, onClose, tenantId, userId: _user
           )}
           <div>
             <label className="block text-xs font-semibold text-slate-600 mb-1" htmlFor="cc-title">
-              Title
+              {t("cases.createModal.field.title")}
             </label>
             <input
               id="cc-title"
@@ -152,7 +154,7 @@ export default function CreateCaseModal({ open, onClose, tenantId, userId: _user
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-600 mb-1" htmlFor="cc-desc">
-              Description
+              {t("cases.createModal.field.description")}
             </label>
             <textarea
               id="cc-desc"
@@ -164,19 +166,19 @@ export default function CreateCaseModal({ open, onClose, tenantId, userId: _user
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1" htmlFor="cc-type">
-                Type
+                {t("cases.createModal.field.type")}
               </label>
               <input
                 id="cc-type"
                 className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
                 value={type}
                 onChange={(e) => setType(e.target.value)}
-                placeholder="e.g. internal"
+                placeholder={t("cases.createModal.field.typePlaceholder")}
               />
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1" htmlFor="cc-pri">
-                Priority
+                {t("cases.createModal.field.priority")}
               </label>
               <select
                 id="cc-pri"
@@ -184,37 +186,40 @@ export default function CreateCaseModal({ open, onClose, tenantId, userId: _user
                 value={priority}
                 onChange={(e) => setPriority(e.target.value)}
               >
-                <option value="low">low</option>
-                <option value="normal">normal</option>
-                <option value="high">high</option>
-                <option value="urgent">urgent</option>
+                <option value="low">{t("cases.createModal.priority.low")}</option>
+                <option value="normal">{t("cases.createModal.priority.normal")}</option>
+                <option value="high">{t("cases.createModal.priority.high")}</option>
+                <option value="urgent">{t("cases.createModal.priority.urgent")}</option>
               </select>
             </div>
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-600 mb-1" htmlFor="cc-wf">
-              Workflow <span className="text-red-600">*</span>
+              {t("cases.createModal.field.workflow")}{" "}
+              <span className="text-red-600">{t("cases.createModal.field.workflowRequired")}</span>
             </label>
             <select
               id="cc-wf"
               className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
-              value={workflowId}
-              onChange={(e) => setWorkflowId(e.target.value)}
+              value={workflowKey}
+              onChange={(e) => setWorkflowKey(e.target.value)}
               disabled={loadingWf}
               required
             >
-              <option value="">{loadingWf ? "Loading…" : "Select a published workflow…"}</option>
+              <option value="">
+                {loadingWf ? t("cases.createModal.loadingWorkflows") : t("cases.createModal.selectWorkflow")}
+              </option>
               {workflows.map((w) => (
-                <option key={w.id} value={w.id}>
+                <option key={w.id} value={w.key ?? ""} disabled={!w.key}>
                   {w.name}
                   {typeof w.version === "number" ? ` (v${w.version})` : ""}
-                  {w.key ? ` — ${w.key}` : ""}
+                  {w.key ? ` — ${w.key}` : ` ${t("cases.createModal.missingKey")}`}
                 </option>
               ))}
             </select>
-            <p className="text-[11px] text-slate-500 mt-1">Only published workflows are listed. The case pins this workflow version.</p>
+            <p className="text-[11px] text-slate-500 mt-1">{t("cases.createModal.workflowHint")}</p>
             {!loadingWf && workflows.length === 0 && (
-              <p className="text-[11px] text-amber-700 mt-1">No published workflows for this tenant. Publish one under Workflows first.</p>
+              <p className="text-[11px] text-amber-700 mt-1">{t("cases.createModal.noWorkflows")}</p>
             )}
           </div>
           <div className="flex justify-end gap-2 pt-2">
@@ -223,14 +228,14 @@ export default function CreateCaseModal({ open, onClose, tenantId, userId: _user
               onClick={onClose}
               className="px-4 py-2 text-sm font-semibold border border-slate-200 rounded-lg hover:bg-slate-50"
             >
-              Cancel
+              {t("common.cancel")}
             </button>
             <button
               type="submit"
-              disabled={submitting || !workflowId.trim() || workflows.length === 0}
+              disabled={submitting || !workflowKey.trim() || workflows.length === 0}
               className="px-4 py-2 text-sm font-semibold bg-primary-container text-white rounded-lg disabled:opacity-50"
             >
-              {submitting ? "Creating…" : "Create"}
+              {submitting ? t("cases.createModal.creating") : t("cases.createModal.create")}
             </button>
           </div>
         </form>

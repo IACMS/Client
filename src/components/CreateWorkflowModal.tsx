@@ -1,4 +1,5 @@
 import { FormEvent, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ApiError, apiPost } from "@/lib/api";
 
 export type CreatedWorkflow = {
@@ -26,6 +27,7 @@ function slugifyKey(name: string): string {
 }
 
 export default function CreateWorkflowModal({ open, onClose, userId, onCreated }: Props) {
+  const { t } = useTranslation();
   const [name, setName] = useState("");
   const [key, setKey] = useState("");
   const [keyManual, setKeyManual] = useState(false);
@@ -89,10 +91,10 @@ export default function CreateWorkflowModal({ open, onClose, userId, onCreated }
           ? err.message
           : err instanceof Error
             ? err.message
-            : "Could not create workflow.";
+            : t("modals.workflow.createFailed");
       setErrorMessage(
         message.includes("fetch") || message === "Failed to fetch"
-          ? "Cannot reach the API gateway. Check VITE_API_URL and services."
+          ? t("common.loadFailed")
           : message,
       );
     } finally {
@@ -117,9 +119,9 @@ export default function CreateWorkflowModal({ open, onClose, userId, onCreated }
             <span className="material-symbols-outlined" aria-hidden>
               account_tree
             </span>
-            Create workflow
+            {t("modals.workflow.createWorkflow")}
           </h2>
-          <button type="button" onClick={handleClose} className="p-1 rounded hover:bg-slate-100" aria-label="Close">
+          <button type="button" onClick={handleClose} className="p-1 rounded hover:bg-slate-100" aria-label={t("common.close")}>
             <span className="material-symbols-outlined">close</span>
           </button>
         </div>
@@ -134,7 +136,7 @@ export default function CreateWorkflowModal({ open, onClose, userId, onCreated }
           )}
           <div>
             <label className="block text-xs font-semibold text-slate-600 mb-1" htmlFor="wf-name">
-              Display name
+              {t("modals.workflow.workflowName")}
             </label>
             <input
               id="wf-name"
@@ -148,7 +150,7 @@ export default function CreateWorkflowModal({ open, onClose, userId, onCreated }
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-600 mb-1" htmlFor="wf-key">
-              Workflow key
+              {t("modals.workflow.workflowKey")}
             </label>
             <input
               id="wf-key"
@@ -165,7 +167,7 @@ export default function CreateWorkflowModal({ open, onClose, userId, onCreated }
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-600 mb-1" htmlFor="wf-desc">
-              Description <span className="font-normal text-slate-400">(optional)</span>
+              {t("common.description")} <span className="font-normal text-slate-400">({t("common.optional")})</span>
             </label>
             <textarea
               id="wf-desc"
@@ -182,14 +184,14 @@ export default function CreateWorkflowModal({ open, onClose, userId, onCreated }
               onClick={handleClose}
               className="flex-1 py-2.5 rounded-lg border border-slate-200 font-semibold text-slate-700 hover:bg-slate-50"
             >
-              Cancel
+              {t("common.cancel")}
             </button>
             <button
               type="submit"
               disabled={submitting || !name.trim() || !key.trim()}
               className="flex-1 bg-primary text-white py-2.5 rounded-lg font-semibold hover:bg-primary-container disabled:opacity-50 disabled:pointer-events-none"
             >
-              {submitting ? "Creating…" : "Create draft"}
+              {submitting ? t("modals.workflow.creating") : t("modals.workflow.create")}
             </button>
           </div>
         </form>

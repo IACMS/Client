@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useSession } from "@/context/SessionContext";
 import Can from "@/permissions/Can";
 import { ApiError, apiGet, isAbortError } from "@/lib/api";
@@ -16,8 +17,10 @@ type TenantRow = {
  * Operational cases, referrals, and workflows are intentionally omitted — tenant staff use the standard dashboard.
  */
 export default function PlatformDashboardPage() {
+  const { t } = useTranslation();
   const { user } = useSession();
-  const greeting = [user?.firstName, user?.lastName].filter(Boolean).join(" ") || user?.email || "there";
+  const greeting =
+    [user?.firstName, user?.lastName].filter(Boolean).join(" ") || user?.email || t("dashboard.greetingFallback");
 
   const [loading, setLoading] = useState(true);
   const [tenants, setTenants] = useState<TenantRow[]>([]);
@@ -35,14 +38,14 @@ export default function PlatformDashboardPage() {
         }
       } catch (e) {
         if (isAbortError(e) || ac.signal.aborted) return;
-        setLoadError(e instanceof ApiError ? e.message : "Could not load organizations.");
+        setLoadError(e instanceof ApiError ? e.message : t("dashboard.platform.loadFailed"));
         setTenants([]);
       } finally {
         if (!ac.signal.aborted) setLoading(false);
       }
     })();
     return () => ac.abort();
-  }, []);
+  }, [t]);
 
   const activeOrgs = tenants.filter((t) => t.isActive !== false).length;
 
@@ -50,11 +53,8 @@ export default function PlatformDashboardPage() {
     <div className="p-gutter max-w-7xl mx-auto space-y-gutter pb-8">
       <div className="flex justify-between items-end flex-wrap gap-4">
         <div>
-          <h2 className="font-h2 text-h2 text-primary leading-none">Platform overview</h2>
-          <p className="text-slate-500 mt-1">
-            Signed in as <span className="font-semibold text-slate-700">{greeting}</span> — register agencies and
-            monitor the tenant directory. Case and workflow data stay with each organization.
-          </p>
+          <h2 className="font-h2 text-h2 text-primary leading-none">{t("dashboard.platform.title")}</h2>
+          <p className="text-slate-500 mt-1">{t("dashboard.platform.intro", { name: greeting })}</p>
         </div>
         <div className="flex gap-2 flex-wrap">
           <Can permission="platform:manage_tenants">
@@ -63,7 +63,7 @@ export default function PlatformDashboardPage() {
               className="px-4 py-2 bg-primary-container text-white rounded-md text-xs font-semibold hover:bg-teal-800 transition-colors inline-flex items-center gap-2"
             >
               <span className="material-symbols-outlined text-base">domain</span>
-              Agency directory
+              {t("dashboard.platform.agencyDirectory")}
             </Link>
           </Can>
         </div>
@@ -83,32 +83,30 @@ export default function PlatformDashboardPage() {
               to="/agencies"
               className="text-[10px] font-bold text-teal-600 bg-teal-50 px-2 py-0.5 rounded-full hover:underline"
             >
-              View directory
+              {t("dashboard.platform.viewDirectory")}
             </Link>
           </div>
-          <h3 className="text-slate-500 text-sm font-label-caps tracking-wider">REGISTERED AGENCIES</h3>
+          <h3 className="text-slate-500 text-sm font-label-caps tracking-wider">{t("dashboard.platform.registeredAgencies")}</h3>
           <p className="text-3xl font-bold text-teal-900 mt-1">{loading ? "…" : tenants.length}</p>
-          <p className="mt-4 text-[10px] text-slate-400">Organizations returned from GET /api/v1/tenants.</p>
+          <p className="mt-4 text-[10px] text-slate-400">{t("dashboard.platform.registeredHint")}</p>
         </div>
 
         <div className="col-span-12 md:col-span-4 bg-white p-6 rounded-lg border border-slate-200 shadow-sm">
           <div className="p-2 bg-emerald-50 rounded-lg mb-4 w-fit">
             <span className="material-symbols-outlined text-emerald-700">check_circle</span>
           </div>
-          <h3 className="text-slate-500 text-sm font-label-caps tracking-wider">ACTIVE</h3>
+          <h3 className="text-slate-500 text-sm font-label-caps tracking-wider">{t("dashboard.platform.activeLabel")}</h3>
           <p className="text-3xl font-bold text-teal-900 mt-1">{loading ? "…" : activeOrgs}</p>
-          <p className="mt-4 text-[10px] text-slate-400">Tenants marked active in the registry.</p>
+          <p className="mt-4 text-[10px] text-slate-400">{t("dashboard.platform.activeHint")}</p>
         </div>
 
         <div className="col-span-12 md:col-span-4 bg-white p-6 rounded-lg border border-slate-200 shadow-sm">
           <div className="p-2 bg-slate-100 rounded-lg mb-4 w-fit">
             <span className="material-symbols-outlined text-slate-600">info</span>
           </div>
-          <h3 className="text-slate-500 text-sm font-label-caps tracking-wider">OPERATIONAL DATA</h3>
-          <p className="text-lg font-semibold text-slate-800 mt-1">Not shown here</p>
-          <p className="mt-4 text-[10px] text-slate-400">
-            Cases, referrals, and workflows are visible only when signed in as that agency&apos;s operational staff.
-          </p>
+          <h3 className="text-slate-500 text-sm font-label-caps tracking-wider">{t("dashboard.platform.operationalData")}</h3>
+          <p className="text-lg font-semibold text-slate-800 mt-1">{t("dashboard.platform.notShownHere")}</p>
+          <p className="mt-4 text-[10px] text-slate-400">{t("dashboard.platform.operationalHint")}</p>
         </div>
       </div>
     </div>

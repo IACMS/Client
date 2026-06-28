@@ -1,14 +1,17 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { StubNavItem } from "@/components/StubNavItem";
 import { useSession } from "@/context/SessionContext";
 import { ApiError, apiPost, persistAuthTokensFromResponse } from "@/lib/api";
-import { PASSWORD_HINT, isPasswordValid } from "@/lib/passwordRules";
+import { getPasswordHint, isPasswordValid } from "@/lib/passwordRules";
 
 const HERO_IMG =
   "https://lh3.googleusercontent.com/aida-public/AB6AXuAc7CUm4yqRRDQPGCDqcj9F-k4mKrmhDt60OlmT3antKoRgKyYfv20a4BjvxkfITydqlHC1Do6K66sm6L4fTiY6tqLWtvNWq05b9eA00ajNWrRPW8QMiddG4DWioBFtp8qk-Rh3TtHYvssGTL2TDxBjG0cpVMRjN18bFPc8PWvyvtD5q2_N0XHsSUgP69bCfI34Im2UxQ7OhlAKMNEyiEvbcyzzBsq9NdmQPYoimSgpoprOztv6XXRZnqVirG1igmgB5P03-0PtN1U";
 
 export default function TenantRegisterPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { refresh, user, status } = useSession();
 
@@ -41,15 +44,15 @@ export default function TenantRegisterPage() {
     const ln = lastName.trim();
     const un = username.trim().toLowerCase();
     if (!tn || !tc || !fn || !ln || !em || !password) {
-      setErrorMessage("Fill in all required fields.");
+      setErrorMessage(t("auth.register.requiredFields"));
       return;
     }
     if (!isPasswordValid(password)) {
-      setErrorMessage(PASSWORD_HINT);
+      setErrorMessage(getPasswordHint());
       return;
     }
     if (password !== confirmPassword) {
-      setErrorMessage("Passwords do not match.");
+      setErrorMessage(t("auth.register.passwordMismatch"));
       return;
     }
     setErrorMessage(null);
@@ -79,10 +82,10 @@ export default function TenantRegisterPage() {
       navigate("/dashboard", { replace: true });
     } catch (err) {
       const message =
-        err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Registration failed.";
+        err instanceof ApiError ? err.message : err instanceof Error ? err.message : t("auth.register.failed");
       setErrorMessage(
         message.includes("fetch") || message === "Failed to fetch"
-          ? "Cannot reach the API gateway. Check VITE_API_URL and that the backend is running."
+          ? t("auth.apiUnreachableShort")
           : message,
       );
     } finally {
@@ -99,12 +102,13 @@ export default function TenantRegisterPage() {
           </Link>
           <div className="h-6 w-px bg-slate-200 mx-2" />
           <span className="font-label-caps text-on-surface-variant uppercase tracking-widest">
-            Organization registration
+            {t("auth.tenantRegister.header")}
           </span>
         </div>
         <div className="flex items-center gap-4">
+          <LanguageSwitcher />
           <Link to="/login" className="font-body-sm text-primary-container font-semibold hover:underline">
-            Sign in
+            {t("nav.signIn")}
           </Link>
         </div>
       </header>
@@ -114,14 +118,13 @@ export default function TenantRegisterPage() {
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-gutter">
               <div className="lg:col-span-5 space-y-lg">
                 <div className="bg-primary-container p-lg rounded-xl text-on-primary">
-                  <h1 className="font-h1 text-h1 mb-md text-white">Register a new organization.</h1>
+                  <h1 className="font-h1 text-h1 mb-md text-white">{t("auth.tenantRegister.heroTitle")}</h1>
                   <p className="font-body-lg text-body-lg text-on-primary-container mb-xl">
-                    Creates your tenant, first administrator account, and signs you in. Choose a unique tenant code
-                    your agency will use at login.
+                    {t("auth.tenantRegister.heroBody")}
                   </p>
                   <ul className="space-y-md text-on-primary-container font-body-sm list-disc pl-5">
-                    <li>You become tenant administrator for the new organization.</li>
-                    <li>Invite colleagues afterward from Users in the portal.</li>
+                    <li>{t("auth.tenantRegister.bullet1")}</li>
+                    <li>{t("auth.tenantRegister.bullet2")}</li>
                   </ul>
                 </div>
                 <div className="relative h-64 rounded-xl overflow-hidden shadow-sm border border-slate-200">
@@ -132,11 +135,11 @@ export default function TenantRegisterPage() {
               <div className="lg:col-span-7">
                 <div className="bg-white p-lg rounded-xl border border-outline-variant shadow-sm">
                   <div className="mb-lg border-b border-surface-variant pb-md">
-                    <h2 className="font-h2 text-h2 text-primary">Create organization</h2>
+                    <h2 className="font-h2 text-h2 text-primary">{t("auth.tenantRegister.formTitle")}</h2>
                     <p className="font-body-sm text-on-surface-variant mt-xs">
-                      Already have a tenant code from your admin?{" "}
+                      {t("auth.tenantRegister.formIntro")}{" "}
                       <Link to="/register" className="text-primary font-semibold hover:underline">
-                        Join an existing tenant
+                        {t("auth.tenantRegister.joinExisting")}
                       </Link>
                       .
                     </p>
@@ -147,12 +150,12 @@ export default function TenantRegisterPage() {
                     )}
                     {done && (
                       <div className="p-md bg-teal-50 border border-teal-200 rounded-lg text-teal-800 text-sm">
-                        Organization created. Redirecting…
+                        {t("auth.tenantRegister.success")}
                       </div>
                     )}
                     <div className="space-y-sm">
                       <label className="font-label-caps text-on-surface-variant block uppercase tracking-wider" htmlFor="org">
-                        Organization name
+                        {t("auth.tenantRegister.orgName")}
                       </label>
                       <input
                         id="org"
@@ -165,22 +168,22 @@ export default function TenantRegisterPage() {
                     </div>
                     <div className="space-y-sm">
                       <label className="font-label-caps text-on-surface-variant block uppercase tracking-wider" htmlFor="tc">
-                        Tenant code
+                        {t("auth.tenantRegister.tenantCode")}
                       </label>
                       <input
                         id="tc"
                         className="w-full rounded-lg border border-outline-variant focus:border-primary focus:ring-2 focus:ring-primary/20 text-body-md py-md px-md font-mono uppercase"
-                        placeholder="e.g. MY-AGENCY-01"
+                        placeholder={t("auth.tenantRegister.tenantCodePlaceholder")}
                         value={tenantCode}
                         onChange={(ev) => setTenantCode(ev.target.value)}
                         required
                       />
-                      <p className="font-body-sm text-on-surface-variant">Letters, numbers, and hyphens only. Stored uppercase.</p>
+                      <p className="font-body-sm text-on-surface-variant">{t("auth.tenantRegister.tenantCodeHint")}</p>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-lg">
                       <div className="space-y-sm">
                         <label className="font-label-caps text-on-surface-variant block uppercase tracking-wider" htmlFor="fn">
-                          First name
+                          {t("auth.register.firstName")}
                         </label>
                         <input
                           id="fn"
@@ -193,7 +196,7 @@ export default function TenantRegisterPage() {
                       </div>
                       <div className="space-y-sm">
                         <label className="font-label-caps text-on-surface-variant block uppercase tracking-wider" htmlFor="ln">
-                          Last name
+                          {t("auth.register.lastName")}
                         </label>
                         <input
                           id="ln"
@@ -207,12 +210,12 @@ export default function TenantRegisterPage() {
                     </div>
                     <div className="space-y-sm">
                       <label className="font-label-caps text-on-surface-variant block uppercase tracking-wider" htmlFor="un">
-                        Username (optional)
+                        {t("auth.tenantRegister.usernameOptional")}
                       </label>
                       <input
                         id="un"
                         className="w-full rounded-lg border border-outline-variant focus:border-primary focus:ring-2 focus:ring-primary/20 text-body-md py-md px-md font-mono"
-                        placeholder="Defaults from email local-part"
+                        placeholder={t("auth.tenantRegister.usernamePlaceholder")}
                         value={username}
                         onChange={(ev) => setUsername(ev.target.value)}
                         autoComplete="username"
@@ -220,7 +223,7 @@ export default function TenantRegisterPage() {
                     </div>
                     <div className="space-y-sm">
                       <label className="font-label-caps text-on-surface-variant block uppercase tracking-wider" htmlFor="em">
-                        Administrator email
+                        {t("auth.tenantRegister.adminEmail")}
                       </label>
                       <input
                         id="em"
@@ -235,7 +238,7 @@ export default function TenantRegisterPage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-lg">
                       <div className="space-y-sm">
                         <label className="font-label-caps text-on-surface-variant block uppercase tracking-wider" htmlFor="pw">
-                          Password
+                          {t("auth.register.password")}
                         </label>
                         <input
                           id="pw"
@@ -246,11 +249,11 @@ export default function TenantRegisterPage() {
                           autoComplete="new-password"
                           required
                         />
-                        <p className="font-body-sm text-on-surface-variant">{PASSWORD_HINT}</p>
+                        <p className="font-body-sm text-on-surface-variant">{getPasswordHint()}</p>
                       </div>
                       <div className="space-y-sm">
                         <label className="font-label-caps text-on-surface-variant block uppercase tracking-wider" htmlFor="pwc">
-                          Confirm password
+                          {t("auth.register.confirmPassword")}
                         </label>
                         <input
                           id="pwc"
@@ -273,9 +276,9 @@ export default function TenantRegisterPage() {
                         />
                       </div>
                       <span className="font-body-sm text-on-surface-variant leading-tight">
-                        I agree to the{" "}
+                        {t("auth.register.agreement")}{" "}
                         <StubNavItem className="inline text-primary font-bold underline underline-offset-2 align-baseline leading-tight">
-                          Inter-Agency Data Sharing Agreement
+                          {t("auth.register.dataSharingAgreement")}
                         </StubNavItem>
                         .
                       </span>
@@ -286,7 +289,7 @@ export default function TenantRegisterPage() {
                         className="w-full bg-primary-container text-white py-lg rounded-lg font-h3 hover:opacity-90 transition-all flex items-center justify-center gap-md disabled:opacity-50 disabled:pointer-events-none"
                         type="submit"
                       >
-                        {submitting ? "Creating organization…" : "Create organization"}
+                        {submitting ? t("auth.tenantRegister.creating") : t("auth.tenantRegister.create")}
                         <span className="material-symbols-outlined">domain_add</span>
                       </button>
                     </div>
@@ -299,11 +302,11 @@ export default function TenantRegisterPage() {
       </main>
       <footer className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 py-4 px-gutter text-center text-xs text-slate-500">
         <Link className="hover:text-teal-600 hover:underline" to="/login">
-          Sign in
+          {t("nav.signIn")}
         </Link>
         {" · "}
         <Link className="hover:text-teal-600 hover:underline" to="/register">
-          Join existing tenant
+          {t("auth.tenantRegister.footerJoinExisting")}
         </Link>
       </footer>
     </div>

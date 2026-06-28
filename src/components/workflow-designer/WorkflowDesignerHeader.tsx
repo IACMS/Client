@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import Can from "@/permissions/Can";
 import type { ApiWorkflow } from "@/hooks/useWorkflow";
 
@@ -24,12 +25,13 @@ export default function WorkflowDesignerHeader({
   onPublish,
   onCreateNewVersion,
 }: Props) {
+  const { t } = useTranslation();
   return (
     <div className="bg-white border-b border-outline-variant p-4 flex justify-between items-center shrink-0 shadow-sm z-10">
       <div>
         <nav className="flex text-[10px] font-label-caps text-secondary mb-1 gap-x-2">
           <Link to="/workflows" className="hover:text-primary">
-            WORKFLOWS
+            {t("portal.breadcrumb.workflows")}
           </Link>
           <span>/</span>
           <span className="text-primary font-bold">DESIGNER</span>
@@ -77,14 +79,14 @@ export default function WorkflowDesignerHeader({
               onClick={onAddTransition}
               className="px-4 py-2 bg-white border border-slate-300 rounded text-sm font-semibold hover:bg-slate-50 transition-colors flex items-center gap-2"
             >
-              <span className="material-symbols-outlined text-[18px]">moving</span> Add transition
+              <span className="material-symbols-outlined text-[18px]">moving</span> {t("modals.workflow.addTransition")}
             </button>
             <button
               type="button"
               onClick={onAbandonDraft}
               className="px-4 py-2 bg-white border border-red-200 text-red-800 rounded text-sm font-semibold hover:bg-red-50 transition-colors flex items-center gap-2"
             >
-              <span className="material-symbols-outlined text-[18px]">delete</span> Abandon draft
+              <span className="material-symbols-outlined text-[18px]">delete</span> {t("workflows.designer.deleteDraft")}
             </button>
             <Can permission="workflows:update">
               <button
@@ -92,7 +94,7 @@ export default function WorkflowDesignerHeader({
                 onClick={onPublish}
                 className="px-4 py-2 bg-primary text-white rounded text-sm font-semibold hover:bg-teal-700 transition-colors flex items-center gap-2 shadow-sm"
               >
-                <span className="material-symbols-outlined text-[18px]">publish</span> Publish
+                <span className="material-symbols-outlined text-[18px]">publish</span> {t("workflows.designer.publish")}
               </button>
             </Can>
           </Can>

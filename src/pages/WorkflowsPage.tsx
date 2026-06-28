@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useSession } from "@/context/SessionContext";
 import { apiGet, isAbortError } from "@/lib/api";
 import CreateWorkflowModal from "@/components/CreateWorkflowModal";
@@ -19,6 +20,7 @@ type ApiWorkflow = {
 type WorkflowsResponse = { workflows?: ApiWorkflow[] };
 
 export default function WorkflowsPage() {
+  const { t } = useTranslation();
   const { user } = useSession();
   const tenantId = user?.tenant?.id ?? user?.tenantId;
   const navigate = useNavigate();
@@ -62,12 +64,12 @@ export default function WorkflowsPage() {
       <div className="mb-8 flex justify-between items-end flex-wrap gap-4">
         <div>
           <div className="flex items-center gap-2 text-slate-500 font-label-caps text-xs mb-2 flex-wrap">
-            <span>PORTAL</span>
+            <span>{t("portal.breadcrumb.portal")}</span>
             <span className="material-symbols-outlined text-xs">chevron_right</span>
-            <span className="text-primary font-bold">WORKFLOWS</span>
+            <span className="text-primary font-bold">{t("portal.breadcrumb.workflows")}</span>
           </div>
-          <h1 className="font-h1 text-primary">Workflow Management</h1>
-          <p className="font-body-md text-slate-600 mt-1">Design and publish cross-agency lifecycle engines.</p>
+          <h1 className="font-h1 text-primary">{t("workflows.title")}</h1>
+          <p className="font-body-md text-slate-600 mt-1">{t("workflows.subtitle")}</p>
         </div>
         <Can permission="workflows:create">
           <button
@@ -77,7 +79,7 @@ export default function WorkflowsPage() {
             className="bg-primary text-white px-6 py-2.5 rounded-lg font-semibold flex items-center gap-2 hover:bg-primary-container transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <span className="material-symbols-outlined">add</span>
-            Create workflow
+            {t("workflows.create")}
           </button>
         </Can>
       </div>
@@ -98,9 +100,9 @@ export default function WorkflowsPage() {
               <p className="text-sm text-slate-500 mb-6 flex-1">{wf.description}</p>
               
               <div className="pt-4 border-t border-slate-100 flex justify-between items-center">
-                <span className="text-xs text-slate-400">Key: {wf.key}</span>
+                <span className="text-xs text-slate-400">{t("workflows.keyLabel", { key: wf.key })}</span>
                 <Link to={`/workflows/${wf.id}/designer`} className="text-primary hover:text-teal-700 font-semibold text-sm flex items-center gap-1">
-                  {wf.status === 'DRAFT' ? 'Open Designer' : 'View Graph'}
+                  {wf.status === 'DRAFT' ? t("workflows.openDesigner") : t("workflows.viewGraph")}
                   <span className="material-symbols-outlined text-sm">arrow_forward</span>
                 </Link>
               </div>
@@ -110,8 +112,8 @@ export default function WorkflowsPage() {
             <div className="col-span-full bg-slate-50 border border-dashed border-slate-300 rounded-xl p-12 text-center space-y-4">
               <p className="text-slate-500">
                 {canConfigure
-                  ? "No workflows found. Create a draft to get started."
-                  : "No workflows have been published for your tenant yet. Contact your agency administrator."}
+                  ? t("workflows.empty.canConfigure")
+                  : t("workflows.empty.readOnly")}
               </p>
               <Can permission="workflows:create">
                 <button
@@ -121,7 +123,7 @@ export default function WorkflowsPage() {
                   className="inline-flex items-center gap-2 bg-primary text-white px-5 py-2 rounded-lg font-semibold hover:bg-primary-container disabled:opacity-50"
                 >
                   <span className="material-symbols-outlined text-lg">add</span>
-                  Create workflow
+                  {t("workflows.create")}
                 </button>
               </Can>
             </div>
