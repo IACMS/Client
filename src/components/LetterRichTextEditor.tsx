@@ -1,8 +1,17 @@
-import { useEditor, EditorContent } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import { useEffect, type ReactNode } from "react";
-import { useTranslation } from "react-i18next";
+import { CKEditor } from "@ckeditor/ckeditor5-react";
+import {
+  Bold,
+  DecoupledEditor,
+  Essentials,
+  Italic,
+  List,
+  Paragraph,
+  Undo,
+  type Editor,
+} from "ckeditor5";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { toEditorHtml } from "@/lib/transitionLetter";
+import "ckeditor5/ckeditor5.css";
 
 type Props = {
   id?: string;
@@ -16,35 +25,6 @@ type Props = {
   fill?: boolean;
 };
 
-function ToolbarButton({
-  onClick,
-  active,
-  disabled,
-  label,
-  children,
-}: {
-  onClick: () => void;
-  active?: boolean;
-  disabled?: boolean;
-  label: string;
-  children: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      aria-label={label}
-      title={label}
-      className={`p-1.5 rounded text-slate-600 hover:bg-slate-100 disabled:opacity-40 ${
-        active ? "bg-slate-200 text-slate-900" : ""
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
 export default function LetterRichTextEditor({
   id,
   value,
@@ -55,114 +35,107 @@ export default function LetterRichTextEditor({
   className = "",
   fill = false,
 }: Props) {
-  const { t } = useTranslation();
-  const editor = useEditor({
-    extensions: [StarterKit],
-    content: toEditorHtml(value),
-    editable: !disabled,
-    onUpdate: ({ editor: ed }) => {
-      onChange(ed.getHTML());
-    },
-    editorProps: {
-      attributes: {
-        ...(id ? { id } : {}),
-        class:
-          "letter-rte-content px-3 py-2 text-sm font-serif leading-relaxed text-slate-800 focus:outline-none min-h-[inherit]",
-        "data-placeholder": placeholder ?? "",
-      },
-    },
-  });
+  const toolbarRef = useRef<HTMLDivElement>(null);
+  const [ready, setReady] = useState(false);
 
-  useEffect(() => {
-    if (!editor) return;
-    editor.setEditable(!disabled);
-  }, [editor, disabled]);
+  const editorConfig = useMemo(
+    () => ({
+      licenseKey: "GPL" as const,
+      plugins: [Essentials, Bold, Italic, Paragraph, List, Undo],
+      toolbar: ["bold", "italic", "|", "bulletedList", "numberedList", "|", "undo", "redo"],
+      placeholder: placeholder ?? "",
+    }),
+    [placeholder],
+  );
 
-  if (!editor) {
-    return (
-      <div
-        className={`border border-slate-200 rounded-lg bg-slate-50 animate-pulse ${fill ? "flex-1 min-h-0" : ""} ${className}`}
-        style={fill ? undefined : { minHeight }}
-      />
-    );
-  }
+  const handleReady = useCallback(
+    (editor: Editor) => {
+      const toolbar = editor.ui.view.toolbar?.element;
+      if (toolbarRef.current && toolbar && !toolbarRef.current.contains(toolbar)) {
+        toolbarRef.current.appendChild(toolbar);
+      }
+      if (id) {
+        editor.editing.view.change((writer) => {
+          const root = editor.editing.view.document.getRoot();
+          if (root) writer.setAttribute("id", id, root);
+        });
+      }
+      setReady(true);
+    },
+    [id],
+  );
 
   return (
     <div
-      className={`border border-slate-200 rounded-lg overflow-hidden bg-white focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary/40 ${
+      className={`letter-ckeditor border border-slate-200 rounded-lg overflow-hidden bg-white focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary/40 ${
         fill ? "flex flex-col flex-1 min-h-0 h-full" : ""
       } ${className}`}
     >
-      <div className="flex flex-wrap items-center gap-0.5 px-2 py-1.5 border-b border-slate-100 bg-slate-50">
-        <ToolbarButton
-          label={t("modals.editor.bold")}
-          disabled={disabled}
-          active={editor.isActive("bold")}
-          onClick={() => editor.chain().focus().toggleBold().run()}
-        >
-          <span className="material-symbols-outlined text-[18px]">format_bold</span>
-        </ToolbarButton>
-        <ToolbarButton
-          label={t("modals.editor.italic")}
-          disabled={disabled}
-          active={editor.isActive("italic")}
-          onClick={() => editor.chain().focus().toggleItalic().run()}
-        >
-          <span className="material-symbols-outlined text-[18px]">format_italic</span>
-        </ToolbarButton>
-        <ToolbarButton
-          label={t("modals.editor.bulletList")}
-          disabled={disabled}
-          active={editor.isActive("bulletList")}
-          onClick={() => editor.chain().focus().toggleBulletList().run()}
-        >
-          <span className="material-symbols-outlined text-[18px]">format_list_bulleted</span>
-        </ToolbarButton>
-        <ToolbarButton
-          label={t("modals.editor.numberedList")}
-          disabled={disabled}
-          active={editor.isActive("orderedList")}
-          onClick={() => editor.chain().focus().toggleOrderedList().run()}
-        >
-          <span className="material-symbols-outlined text-[18px]">format_list_numbered</span>
-        </ToolbarButton>
-        <span className="w-px h-5 bg-slate-200 mx-1" aria-hidden />
-        <ToolbarButton
-          label={t("modals.editor.undo")}
-          disabled={disabled || !editor.can().undo()}
-          onClick={() => editor.chain().focus().undo().run()}
-        >
-          <span className="material-symbols-outlined text-[18px]">undo</span>
-        </ToolbarButton>
-        <ToolbarButton
-          label={t("modals.editor.redo")}
-          disabled={disabled || !editor.can().redo()}
-          onClick={() => editor.chain().focus().redo().run()}
-        >
-          <span className="material-symbols-outlined text-[18px]">redo</span>
-        </ToolbarButton>
-      </div>
+      <div
+        ref={toolbarRef}
+        className={`flex flex-wrap items-center gap-0.5 px-2 py-1 border-b border-slate-100 bg-slate-50 min-h-[40px] [&_.ck-toolbar]:border-0 [&_.ck-toolbar]:bg-transparent [&_.ck-toolbar]:p-0 [&_.ck-toolbar_.ck-toolbar__items]:gap-0.5 ${
+          ready ? "" : "animate-pulse"
+        }`}
+      />
       <div
         style={fill ? undefined : { minHeight }}
-        className={
+        className={`relative ${
           fill
-            ? "flex-1 min-h-0 overflow-y-auto [&_.letter-rte-content]:min-h-full"
-            : "min-h-[inherit] [&_.letter-rte-content]:min-h-[inherit]"
-        }
+            ? "flex-1 min-h-0 overflow-y-auto [&_.ck-editor__editable]:min-h-full"
+            : "min-h-[inherit] [&_.ck-editor__editable]:min-h-[inherit]"
+        }`}
       >
-        <EditorContent editor={editor} />
+        {!ready && (
+          <div
+            className="absolute inset-0 z-10 bg-slate-50 animate-pulse pointer-events-none"
+            aria-hidden
+          />
+        )}
+        <CKEditor
+          editor={DecoupledEditor}
+          data={toEditorHtml(value)}
+          disabled={disabled}
+          config={editorConfig}
+          onReady={handleReady}
+          onChange={(_, editor) => onChange(editor.getData())}
+        />
       </div>
       <style>{`
-        .letter-rte-content p.is-editor-empty:first-child::before {
-          content: attr(data-placeholder);
-          color: #94a3b8;
-          float: left;
-          height: 0;
-          pointer-events: none;
+        .letter-ckeditor .ck.ck-editor__editable {
+          border: 0;
+          box-shadow: none;
+          padding: 0.5rem 0.75rem;
+          font-family: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+          font-size: 0.875rem;
+          line-height: 1.625;
+          color: #1e293b;
+          min-height: ${fill ? "100%" : minHeight};
         }
-        .letter-rte-content p { margin: 0 0 0.65em; }
-        .letter-rte-content p:last-child { margin-bottom: 0; }
-        .letter-rte-content ul, .letter-rte-content ol { margin: 0 0 0.65em 1.25em; padding: 0; }
+        .letter-ckeditor .ck.ck-editor__editable.ck-focused {
+          border: 0;
+          box-shadow: none;
+        }
+        .letter-ckeditor .ck.ck-editor__editable p { margin: 0 0 0.65em; }
+        .letter-ckeditor .ck.ck-editor__editable p:last-child { margin-bottom: 0; }
+        .letter-ckeditor .ck.ck-editor__editable ul,
+        .letter-ckeditor .ck.ck-editor__editable ol {
+          margin: 0 0 0.65em 1.25em;
+          padding: 0;
+        }
+        .letter-ckeditor .ck.ck-editor__editable.ck-placeholder::before {
+          color: #94a3b8;
+        }
+        .letter-ckeditor .ck.ck-button {
+          border-radius: 0.25rem;
+          color: #475569;
+        }
+        .letter-ckeditor .ck.ck-button:hover:not(.ck-disabled) {
+          background: #f1f5f9;
+        }
+        .letter-ckeditor .ck.ck-button.ck-on {
+          background: #e2e8f0;
+          color: #0f172a;
+        }
       `}</style>
     </div>
   );
