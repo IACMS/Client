@@ -10,6 +10,12 @@ type CreateUserModalProps = {
   onSuccess: () => void;
 };
 
+type DepartmentOption = {
+  id: string;
+  code?: string;
+  name?: string;
+};
+
 export default function CreateUserModal({ isOpen, onClose, onSuccess }: CreateUserModalProps) {
   const { t } = useTranslation();
   const { user, status } = useSession();
@@ -24,7 +30,9 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess }: CreateUs
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [roleId, setRoleId] = useState("");
+  const [departmentId, setDepartmentId] = useState("");
   const [roles, setRoles] = useState<RbacRoleRow[]>([]);
+  const [departments, setDepartments] = useState<DepartmentOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,6 +42,12 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess }: CreateUs
     void (async () => {
       const list = tenantId ? await fetchRbacRoles({ tenantId }) : await fetchRbacRoles();
       if (!cancelled) setRoles(list);
+      if (tenantId) {
+        const res = (await fetch(`/api/v1/tenants/${tenantId}/departments`, { credentials: "include" }).then((r) => r.json())) as {
+          departments?: DepartmentOption[];
+        };
+        if (!cancelled) setDepartments(Array.isArray(res.departments) ? res.departments : []);
+      }
     })();
     return () => {
       cancelled = true;
@@ -47,6 +61,7 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess }: CreateUs
     setEmail("");
     setUsername("");
     setRoleId("");
+    setDepartmentId("");
     setError(null);
     setLoading(false);
   }, [isOpen]);
@@ -71,6 +86,7 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess }: CreateUs
       const u = username.trim().toLowerCase();
       if (u) body.username = u;
       if (roleId) body.roleId = roleId;
+      if (departmentId) body.departmentId = departmentId;
 
       await apiPost("/api/v1/auth/users/create", body);
       onSuccess();
@@ -186,6 +202,25 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess }: CreateUs
               placeholder="Defaults to part before @ if empty"
             />
             <p className="text-[11px] text-slate-500 mt-1">Used at login with your tenant code. Leave blank to derive from email.</p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1" htmlFor="invite-dept">
+              Department
+            </label>
+            <select
+              id="invite-dept"
+              value={departmentId}
+              onChange={(e) => setDepartmentId(e.target.value)}
+              className="w-full px-4 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-primary/50 bg-white"
+            >
+              <option value="">No department yet</option>
+              {departments.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name ?? d.code ?? d.id}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div>

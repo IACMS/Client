@@ -20,6 +20,7 @@ export default function ChatPage() {
   const { user } = useSession();
   const { tenantId, get } = useTenantApi();
   const myId = user?.id ?? "";
+  const myDepartmentId = user?.departmentId ?? null;
 
   const [colleagues, setColleagues] = useState<ChatUser[]>([]);
   const [channel, setChannel] = useState<ChatChannel>("agency");
@@ -104,8 +105,9 @@ export default function ChatPage() {
     setSendBusy(true);
     setErrorMessage(null);
     try {
-      const body: { body: string; recipientId?: string } = { body: text };
+      const body: { body: string; recipientId?: string; channel?: string } = { body: text };
       if (channel === "dm" && dmUserId) body.recipientId = dmUserId;
+      if (channel === "department") body.channel = "department";
       await apiPost("/api/v1/chat/messages", body);
       setDraft("");
       await loadMessages();
@@ -120,6 +122,10 @@ export default function ChatPage() {
   const channelTitle =
     channel === "agency"
       ? t("chat.teamChannelTitle", { name: user?.tenant?.name ?? t("chat.agencyFallback") })
+      : channel === "department"
+        ? myDepartmentId
+          ? "Department channel"
+          : "Department channel unavailable"
       : dmPeer
         ? chatUserLabel(dmPeer)
         : t("chat.directMessage");
@@ -168,6 +174,19 @@ export default function ChatPage() {
               <span className="material-symbols-outlined text-lg">groups</span>
               {t("chat.agencyChannel")}
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                setChannel("department");
+                setDmUserId(null);
+              }}
+              className={`mt-2 w-full text-left px-3 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 ${
+                channel === "department" ? "bg-primary text-white" : "hover:bg-slate-200 text-slate-800"
+              }`}
+            >
+              <span className="material-symbols-outlined text-lg">apartment</span>
+              Department channel
+            </button>
           </div>
           <div className="p-3 flex-1 overflow-y-auto">
             <p className="text-[10px] font-label-caps text-slate-500 tracking-wide mb-2">{t("chat.directMessages")}</p>
@@ -202,12 +221,16 @@ export default function ChatPage() {
         <section className="flex flex-col min-h-0 min-w-0">
           <div className="px-4 py-3 border-b border-slate-200 bg-slate-50 flex items-center gap-2 shrink-0">
             <span className="material-symbols-outlined text-teal-700">
-              {channel === "agency" ? "forum" : "person"}
+              {channel === "agency" ? "forum" : channel === "department" ? "apartment" : "person"}
             </span>
             <div className="min-w-0">
               <p className="font-semibold text-slate-900 truncate">{channelTitle}</p>
               <p className="text-[10px] text-slate-500">
-                {channel === "agency" ? t("chat.agencyVisibility") : t("chat.dmVisibility")}
+                {channel === "agency"
+                  ? t("chat.agencyVisibility")
+                  : channel === "department"
+                    ? "Visible only to your department."
+                    : t("chat.dmVisibility")}
               </p>
             </div>
           </div>
@@ -219,7 +242,7 @@ export default function ChatPage() {
             {loadState === "ok" && channel === "dm" && !dmUserId && (
               <p className="text-center text-slate-500 text-sm py-8">{t("chat.selectColleague")}</p>
             )}
-            {loadState === "ok" && messages.length === 0 && (channel === "agency" || dmUserId) && (
+            {loadState === "ok" && messages.length === 0 && (channel === "agency" || channel === "department" || dmUserId) && (
               <p className="text-center text-slate-500 text-sm py-8">{t("chat.noMessages")}</p>
             )}
             {messages.map((m) => {
@@ -231,7 +254,7 @@ export default function ChatPage() {
                       mine ? "bg-primary text-white rounded-br-sm" : "bg-white border border-slate-200 rounded-bl-sm"
                     }`}
                   >
-                    {!mine && channel === "agency" && (
+                    {!mine && channel !== "dm" && (
                       <p className={`text-[10px] font-bold mb-0.5 ${mine ? "text-teal-100" : "text-teal-800"}`}>
                         {chatUserLabel(m.sender)}
                       </p>
@@ -258,10 +281,12 @@ export default function ChatPage() {
                 rows={2}
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
-                disabled={sendBusy || (channel === "dm" && !dmUserId)}
+                disabled={sendBusy || (channel === "dm" && !dmUserId) || (channel === "department" && !myDepartmentId)}
                 placeholder={
                   channel === "agency"
                     ? t("chat.placeholder.agency")
+                    : channel === "department"
+                      ? "Message your department..."
                     : dmUserId
                       ? t("chat.placeholder.dm", { name: chatUserLabel(dmPeer) })
                       : t("chat.placeholder.selectFirst")
@@ -276,7 +301,7 @@ export default function ChatPage() {
               />
               <button
                 type="submit"
-                disabled={sendBusy || !draft.trim() || (channel === "dm" && !dmUserId)}
+                disabled={sendBusy || !draft.trim() || (channel === "dm" && !dmUserId) || (channel === "department" && !myDepartmentId)}
                 className="self-end px-4 py-2.5 bg-primary text-white rounded-lg font-semibold text-sm hover:bg-primary-container disabled:opacity-50 flex items-center gap-1"
               >
                 <span className="material-symbols-outlined text-lg">send</span>

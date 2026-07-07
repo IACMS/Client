@@ -3,6 +3,8 @@ export type ChatUser = {
   email: string;
   firstName: string;
   lastName: string;
+  departmentId?: string | null;
+  department?: { id: string; code?: string; name?: string } | null;
   isSelf?: boolean;
 };
 
@@ -11,13 +13,15 @@ export type ChatMessage = {
   tenantId: string;
   senderId: string;
   recipientId: string | null;
+  departmentId?: string | null;
+  recipientDepartmentId?: string | null;
   body: string;
   createdAt: string;
   sender: ChatUser | null;
   recipient: ChatUser | null;
 };
 
-export type ChatChannel = "agency" | "dm";
+export type ChatChannel = "agency" | "department" | "dm";
 
 export function chatUserLabel(u: ChatUser | null | undefined): string {
   if (!u) return "Unknown";

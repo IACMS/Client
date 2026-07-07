@@ -13,12 +13,15 @@ import {
 export type { ApiReferral };
 
 type WorkflowOption = { id: string; name: string; key: string; version: number; status?: string };
+type DepartmentOption = { id: string; code?: string; name?: string };
 type TenantUserOption = {
   id: string;
   email: string;
   firstName: string;
   lastName: string;
   isActive: boolean;
+  departmentId?: string | null;
+  department?: { id: string; code?: string; name?: string } | null;
 };
 
 function formatWhen(value?: string | null) {
@@ -100,6 +103,11 @@ function ReferralsList({
               </span>
             </div>
             {r.referralReason && <p className="text-slate-600 mt-2">{r.referralReason}</p>}
+            {(r.fromDepartmentId || r.toDepartmentId) && (
+              <p className="text-xs text-slate-500 mt-2">
+                Departments: {r.fromDepartmentId ?? "—"} → {r.toDepartmentId ?? "—"}
+              </p>
+            )}
             {direction === "outgoing" && r.progress && (
               <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
@@ -157,6 +165,9 @@ export default function CaseReferralsPanel({
   const [rows, setRows] = useState<ApiReferral[]>([]);
   const [workflowOptions, setWorkflowOptions] = useState<WorkflowOption[]>([]);
   const [tenantUsers, setTenantUsers] = useState<TenantUserOption[]>([]);
+  const [myDepartments, setMyDepartments] = useState<DepartmentOption[]>([]);
+  const [fromDepartmentId, setFromDepartmentId] = useState("");
+  const [toDepartmentId, setToDepartmentId] = useState("");
   const [workflowId, setWorkflowId] = useState("");
   const [assignedToUserId, setAssignedToUserId] = useState("");
   const [assignBusy, setAssignBusy] = useState(false);
@@ -172,6 +183,23 @@ export default function CaseReferralsPanel({
       ) ?? null,
     [rows, fromTenantId],
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = (await apiGet(`/api/v1/tenants/${encodeURIComponent(fromTenantId)}/departments`)) as {
+          departments?: DepartmentOption[];
+        };
+        if (!cancelled) setMyDepartments(Array.isArray(data.departments) ? data.departments : []);
+      } catch {
+        if (!cancelled) setMyDepartments([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fromTenantId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -243,15 +271,23 @@ export default function CaseReferralsPanel({
         setSubmitting(false);
         return;
       }
+      if (!fromDepartmentId || !toDepartmentId) {
+        setMsg("Select both the sending and receiving department IDs.");
+        setSubmitting(false);
+        return;
+      }
       await apiPost("/api/v1/referrals", {
         caseId,
         fromTenantId,
         toTenantId,
+        fromDepartmentId,
+        toDepartmentId,
         referredBy: userId,
         ...(reason.trim() ? { referralReason: reason.trim() } : {}),
       });
       setPartnerCode("");
       setReason("");
+      setToDepartmentId("");
       setListVersion((x) => x + 1);
       setMsg(t("modals.referral.created"));
     } catch (err) {
@@ -308,6 +344,32 @@ export default function CaseReferralsPanel({
             {msg}
           </p>
         )}
+        <div className="grid sm:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">From department</label>
+            <select
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+              value={fromDepartmentId}
+              onChange={(e) => setFromDepartmentId(e.target.value)}
+            >
+              <option value="">Select department</option>
+              {myDepartments.map((dept) => (
+                <option key={dept.id} value={dept.id}>
+                  {dept.name ?? dept.code ?? dept.id}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">To department ID</label>
+            <input
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono"
+              value={toDepartmentId}
+              onChange={(e) => setToDepartmentId(e.target.value)}
+              placeholder="Paste target department UUID"
+            />
+          </div>
+        </div>
         <div>
           <label className="block text-xs font-semibold text-slate-600 mb-1" htmlFor="ref-code">
             {t("modals.referral.partnerCode")}

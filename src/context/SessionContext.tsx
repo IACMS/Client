@@ -32,6 +32,7 @@ export type SessionUser = {
   email: string;
   firstName?: string;
   lastName?: string;
+  departmentId?: string | null;
   /** When true, user must change password (new admin-created account, etc.). */
   mustChangePassword?: boolean;
   /** Cookie session includes nested tenant; JWT auth returns flat tenantId from `/session/status`. */

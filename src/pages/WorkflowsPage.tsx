@@ -12,6 +12,7 @@ type ApiWorkflow = {
   key: string;
   name: string;
   description?: string;
+  departmentId?: string | null;
   status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
   version: number;
   updatedAt: string;
@@ -98,6 +99,9 @@ export default function WorkflowsPage() {
               </div>
               <h3 className="font-h3 text-slate-800 mb-2">{wf.name}</h3>
               <p className="text-sm text-slate-500 mb-6 flex-1">{wf.description}</p>
+              <p className="text-xs text-slate-400 mb-4">
+                Scope: {wf.departmentId ? "Department-specific" : "Tenant-wide"}
+              </p>
               
               <div className="pt-4 border-t border-slate-100 flex justify-between items-center">
                 <span className="text-xs text-slate-400">{t("workflows.keyLabel", { key: wf.key })}</span>
