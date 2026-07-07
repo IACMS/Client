@@ -41,6 +41,7 @@ type Props = {
   caseClosed: boolean;
   onExecuteAction: (action: ProgressAvailableAction) => void;
   transitionRoleLabels: (ids?: string[]) => string[];
+  senderProgress?: { range?: string; lastUpdatedAt?: string | null } | null;
 };
 
 function progressTimingCaption(
@@ -76,6 +77,7 @@ export default function CaseTaskProgressView({
   caseClosed,
   onExecuteAction,
   transitionRoleLabels,
+  senderProgress,
 }: Props) {
   const { t } = useTranslation();
   const steps = guide?.steps ?? [];
@@ -107,6 +109,50 @@ export default function CaseTaskProgressView({
   }, [transitions]);
 
   if (!guide || steps.length === 0) {
+    const stage = senderProgress?.range ? String(senderProgress.range) : "";
+    if (stage) {
+      const percentByRange: Record<string, number> = {
+        Received: 15,
+        Assigned: 45,
+        "Being worked on": 65,
+        "Near completion": 85,
+        Completed: 100,
+        Rejected: 0,
+      };
+      const percent = percentByRange[stage] ?? 15;
+      return (
+        <div className="p-lg max-w-3xl mx-auto w-full">
+          <div className="bg-white border border-outline-variant rounded-xl p-6 shadow-sm">
+            <h2 className="font-h3 text-slate-800 flex items-center gap-2 mb-1">
+              <span className="material-symbols-outlined text-primary">route</span>
+              Task progress
+            </h2>
+            <p className="text-sm text-secondary max-w-3xl mb-4">
+              This case is currently held by another agency. You can see a safe progress range only.
+            </p>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+              <span className="text-label-caps text-secondary text-xs">Safe progress</span>
+              <span className="text-sm font-bold text-slate-800">{stage}</span>
+            </div>
+
+            <div className="h-3 rounded-full bg-slate-100 overflow-hidden border border-slate-200">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-teal-500 to-teal-600 transition-all duration-500"
+                style={{ width: `${percent}%` }}
+              />
+            </div>
+
+            <p className="text-[11px] text-slate-500 mt-2">
+              {senderProgress?.lastUpdatedAt
+                ? `Last updated: ${new Date(senderProgress.lastUpdatedAt).toLocaleString()}`
+                : `Last updated: —`}
+            </p>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="p-lg max-w-3xl mx-auto">
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-amber-900 text-sm">
