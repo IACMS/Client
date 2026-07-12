@@ -71,6 +71,8 @@ type CaseState = {
     steps: WorkflowGuideStep[];
     transitions: { id: string; name: string; fromStepId: string; toStepId: string }[];
   } | null;
+  /** Sender-safe progress when another tenant currently holds the case custody. */
+  senderProgress?: { range?: string; lastUpdatedAt?: string | null } | null;
 };
 
 type ApiAssignmentRow = {
@@ -833,6 +835,7 @@ export default function CaseDetailPage() {
               caseClosed={workflowLocked}
               onExecuteAction={openExecuteModal}
               transitionRoleLabels={transitionRoleLabels}
+              senderProgress={caseState.senderProgress ?? null}
             />
           ) : (
             <div className="p-lg text-center text-secondary">{t("cases.detail.loadingWorkflow")}</div>
@@ -1144,6 +1147,9 @@ export default function CaseDetailPage() {
             fromTenantId={sessionTenantId}
             userId={user.id}
             canCreate={canRefer && !incomingPendingReferral}
+            onRefresh={() => {
+              void loadCase();
+            }}
           />
         )}
 

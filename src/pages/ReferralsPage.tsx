@@ -9,8 +9,18 @@ import ReferralActions from "@/components/ReferralActions";
 import {
   type ApiReferral,
   referralDirection,
+  referralProgressClass,
   referralStatusClass,
 } from "@/lib/referralsApi";
+
+function formatWhen(value?: string | null) {
+  if (!value) return "—";
+  try {
+    return new Date(value).toLocaleString();
+  } catch {
+    return value;
+  }
+}
 
 type ReferralsResponse = { referrals?: ApiReferral[] };
 
@@ -125,6 +135,7 @@ export default function ReferralsPage() {
                     <th className="p-4 font-semibold">{t("referrals.table.case")}</th>
                     <th className="p-4 font-semibold">{t("referrals.table.direction")}</th>
                     <th className="p-4 font-semibold">{t("referrals.table.status")}</th>
+                    <th className="p-4 font-semibold">Progress</th>
                     <th className="p-4 font-semibold">{t("referrals.table.referred")}</th>
                     <th className="p-4 font-semibold text-right">{t("referrals.table.actions")}</th>
                   </tr>
@@ -167,8 +178,37 @@ export default function ReferralsPage() {
                             {r.status}
                           </span>
                         </td>
+                        <td className="p-4 text-sm text-slate-600">
+                          {dir === "outgoing" && r.progress ? (
+                            <div className="space-y-1 min-w-[180px]">
+                              <span
+                                className={`inline-flex px-2 py-1 rounded text-[11px] font-bold ${referralProgressClass(r.progress.range)}`}
+                              >
+                                {r.progress.range ?? "Received"}
+                              </span>
+                              <p className="text-xs text-slate-500">
+                                Last updated: {formatWhen(r.progress.lastUpdatedAt)}
+                              </p>
+                            </div>
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
+                        </td>
                         <td className="p-4 text-sm text-slate-500 whitespace-nowrap">
-                          {r.referredAt ? new Date(r.referredAt).toLocaleString() : "—"}
+                          <div className="space-y-1">
+                            <p>{formatWhen(r.referredAt)}</p>
+                            {dir === "outgoing" ? (
+                              <p className="text-xs">
+                                {r.completedAt
+                                  ? `Completed: ${formatWhen(r.completedAt)}`
+                                  : r.acceptedAt
+                                    ? `Accepted: ${formatWhen(r.acceptedAt)}`
+                                    : r.rejectedAt
+                                      ? `Rejected: ${formatWhen(r.rejectedAt)}`
+                                      : ""}
+                              </p>
+                            ) : null}
+                          </div>
                         </td>
                         <td className="p-4">
                           <div className="flex flex-col items-end gap-2">
