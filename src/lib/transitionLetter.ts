@@ -10,6 +10,14 @@ const LETTER_BODY_ALLOWED_TAGS = [
   "b",
   "i",
   "u",
+  "s",
+  "del",
+  "sub",
+  "sup",
+  "code",
+  "span",
+  "mark",
+  "a",
   "ul",
   "ol",
   "li",
@@ -17,7 +25,18 @@ const LETTER_BODY_ALLOWED_TAGS = [
   "h2",
   "h3",
   "blockquote",
+  "hr",
+  "table",
+  "thead",
+  "tbody",
+  "tr",
+  "th",
+  "td",
+  "figure",
+  "figcaption",
 ];
+
+const LETTER_BODY_ALLOWED_ATTR = ["style", "href", "target", "rel", "colspan", "rowspan", "class"];
 
 export type LetterTemplateConfig = {
   letterHeader?: string;
@@ -259,7 +278,10 @@ export function htmlToPlainText(html: string): string {
 }
 
 export function sanitizeLetterHtml(html: string): string {
-  return DOMPurify.sanitize(html, { ALLOWED_TAGS: LETTER_BODY_ALLOWED_TAGS });
+  return DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: LETTER_BODY_ALLOWED_TAGS,
+    ALLOWED_ATTR: LETTER_BODY_ALLOWED_ATTR,
+  });
 }
 
 function escapeHtml(s: string): string {

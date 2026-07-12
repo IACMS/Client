@@ -1,17 +1,112 @@
 import { CKEditor } from "@ckeditor/ckeditor5-react";
 import {
+  Alignment,
+  Autoformat,
+  BlockQuote,
   Bold,
+  Code,
   DecoupledEditor,
   Essentials,
+  FindAndReplace,
+  Font,
+  Heading,
+  Highlight,
+  HorizontalLine,
+  Indent,
   Italic,
+  Link,
   List,
   Paragraph,
-  Undo,
+  PasteFromOffice,
+  RemoveFormat,
+  SourceEditing,
+  SpecialCharacters,
+  SpecialCharactersEssentials,
+  Strikethrough,
+  Subscript,
+  Superscript,
+  Table,
+  TableToolbar,
+  Underline,
   type Editor,
 } from "ckeditor5";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { toEditorHtml } from "@/lib/transitionLetter";
 import "ckeditor5/ckeditor5.css";
+
+const EDITOR_PLUGINS = [
+  Essentials,
+  Autoformat,
+  Heading,
+  Font,
+  Bold,
+  Italic,
+  Underline,
+  Strikethrough,
+  Subscript,
+  Superscript,
+  Code,
+  Alignment,
+  Paragraph,
+  List,
+  Indent,
+  Link,
+  BlockQuote,
+  Highlight,
+  HorizontalLine,
+  Table,
+  TableToolbar,
+  RemoveFormat,
+  SpecialCharacters,
+  SpecialCharactersEssentials,
+  FindAndReplace,
+  PasteFromOffice,
+  SourceEditing,
+] as const;
+
+const FULL_TOOLBAR_ITEMS = [
+  "undo",
+  "redo",
+  "|",
+  "findAndReplace",
+  "selectAll",
+  "|",
+  "heading",
+  "|",
+  "fontSize",
+  "fontFamily",
+  "fontColor",
+  "fontBackgroundColor",
+  "|",
+  "bold",
+  "italic",
+  "underline",
+  "strikethrough",
+  "subscript",
+  "superscript",
+  "code",
+  "removeFormat",
+  "|",
+  "highlight",
+  "|",
+  "alignment",
+  "|",
+  "bulletedList",
+  "numberedList",
+  "|",
+  "outdent",
+  "indent",
+  "|",
+  "link",
+  "blockQuote",
+  "insertTable",
+  "horizontalLine",
+  "specialCharacters",
+  "|",
+  "sourceEditing",
+] as const;
+
+const MINIMAL_TOOLBAR_ITEMS = ["bold", "italic", "|", "bulletedList", "numberedList", "|", "undo", "redo"] as const;
 
 type Props = {
   id?: string;
@@ -23,6 +118,8 @@ type Props = {
   className?: string;
   /** Grow to fill available flex space (for fullscreen letter body). */
   fill?: boolean;
+  /** Toolbar density for small fields vs full letter body. */
+  toolbarPreset?: "minimal" | "full";
 };
 
 export default function LetterRichTextEditor({
@@ -34,6 +131,7 @@ export default function LetterRichTextEditor({
   minHeight = "200px",
   className = "",
   fill = false,
+  toolbarPreset = "full",
 }: Props) {
   const toolbarRef = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false);
@@ -41,19 +139,48 @@ export default function LetterRichTextEditor({
   const editorConfig = useMemo(
     () => ({
       licenseKey: "GPL" as const,
-      plugins: [Essentials, Bold, Italic, Paragraph, List, Undo],
-      toolbar: ["bold", "italic", "|", "bulletedList", "numberedList", "|", "undo", "redo"],
+      plugins: [...EDITOR_PLUGINS],
+      menuBar: {
+        isVisible: false,
+      },
+      toolbar: {
+        items: [...(toolbarPreset === "minimal" ? MINIMAL_TOOLBAR_ITEMS : FULL_TOOLBAR_ITEMS)],
+        shouldNotGroupWhenFull: true,
+      },
+      heading: {
+        options: [
+          { model: "paragraph" as const, title: "Paragraph", class: "ck-heading_paragraph" },
+          { model: "heading1" as const, view: "h1", title: "Heading 1", class: "ck-heading_heading1" },
+          { model: "heading2" as const, view: "h2", title: "Heading 2", class: "ck-heading_heading2" },
+          { model: "heading3" as const, view: "h3", title: "Heading 3", class: "ck-heading_heading3" },
+        ],
+      },
+      table: {
+        contentToolbar: [
+          "tableColumn",
+          "tableRow",
+          "mergeTableCells",
+          "tableProperties",
+          "tableCellProperties",
+        ],
+      },
+      link: {
+        addTargetToExternalLinks: true,
+        defaultProtocol: "https://",
+      },
       placeholder: placeholder ?? "",
     }),
-    [placeholder],
+    [placeholder, toolbarPreset],
   );
 
   const handleReady = useCallback(
     (editor: Editor) => {
       const toolbar = editor.ui.view.toolbar?.element;
-      if (toolbarRef.current && toolbar && !toolbarRef.current.contains(toolbar)) {
-        toolbarRef.current.appendChild(toolbar);
+      if (toolbarRef.current && toolbar) {
+        toolbarRef.current.replaceChildren(toolbar);
       }
+      const menuBar = editor.ui.view.menuBarView?.element;
+      menuBar?.remove();
       if (id) {
         editor.editing.view.change((writer) => {
           const root = editor.editing.view.document.getRoot();
@@ -65,6 +192,11 @@ export default function LetterRichTextEditor({
     [id],
   );
 
+  const handleDestroy = useCallback(() => {
+    toolbarRef.current?.replaceChildren();
+    setReady(false);
+  }, []);
+
   return (
     <div
       className={`letter-ckeditor border border-slate-200 rounded-lg overflow-hidden bg-white focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary/40 ${
@@ -73,7 +205,7 @@ export default function LetterRichTextEditor({
     >
       <div
         ref={toolbarRef}
-        className={`flex flex-wrap items-center gap-0.5 px-2 py-1 border-b border-slate-100 bg-slate-50 min-h-[40px] [&_.ck-toolbar]:border-0 [&_.ck-toolbar]:bg-transparent [&_.ck-toolbar]:p-0 [&_.ck-toolbar_.ck-toolbar__items]:gap-0.5 ${
+        className={`flex flex-wrap items-center gap-0.5 px-2 py-1.5 border-b border-slate-100 bg-slate-50 min-h-[40px] [&_.ck-toolbar]:flex-wrap [&_.ck-toolbar]:border-0 [&_.ck-toolbar]:bg-transparent [&_.ck-toolbar]:p-0 [&_.ck-toolbar_.ck-toolbar__items]:flex-wrap [&_.ck-toolbar_.ck-toolbar__items]:gap-0.5 ${
           ready ? "" : "animate-pulse"
         }`}
       />
@@ -97,6 +229,7 @@ export default function LetterRichTextEditor({
           disabled={disabled}
           config={editorConfig}
           onReady={handleReady}
+          onAfterDestroy={handleDestroy}
           onChange={(_, editor) => onChange(editor.getData())}
         />
       </div>
@@ -135,6 +268,10 @@ export default function LetterRichTextEditor({
         .letter-ckeditor .ck.ck-button.ck-on {
           background: #e2e8f0;
           color: #0f172a;
+        }
+        .letter-ckeditor .ck-editor .ck-toolbar,
+        .letter-ckeditor .ck-editor .ck-menu-bar {
+          display: none !important;
         }
       `}</style>
     </div>

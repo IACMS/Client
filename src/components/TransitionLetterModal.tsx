@@ -327,6 +327,7 @@ export default function TransitionLetterModal({
                   placeholder={t("modals.workflow.letterToPlaceholder")}
                   disabled={submitting}
                   minHeight="48px"
+                  toolbarPreset="minimal"
                 />
               </div>
             </div>
@@ -343,6 +344,7 @@ export default function TransitionLetterModal({
                 placeholder={t("modals.workflow.letterBodyPlaceholder")}
                 disabled={submitting}
                 minHeight="200px"
+                toolbarPreset="full"
               />
               {requiresLetter && !bodyOk && (
                 <p className="text-xs text-amber-800">At least a short paragraph is required.</p>
@@ -362,6 +364,7 @@ export default function TransitionLetterModal({
                   placeholder={template.letterClosing ?? t("modals.workflow.letterClosingPlaceholder")}
                   disabled={submitting}
                   minHeight="48px"
+                  toolbarPreset="minimal"
                 />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
