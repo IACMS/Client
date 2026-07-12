@@ -134,6 +134,7 @@ export default function ReferralsPage() {
                   <tr className="bg-slate-50 border-b border-outline-variant text-label-caps text-slate-500 text-xs">
                     <th className="p-4 font-semibold">{t("referrals.table.case")}</th>
                     <th className="p-4 font-semibold">{t("referrals.table.direction")}</th>
+                    <th className="p-4 font-semibold">Departments</th>
                     <th className="p-4 font-semibold">{t("referrals.table.status")}</th>
                     <th className="p-4 font-semibold">Progress</th>
                     <th className="p-4 font-semibold">{t("referrals.table.referred")}</th>
@@ -170,6 +171,11 @@ export default function ReferralsPage() {
                               {t("referrals.direction.outgoing")}
                             </span>
                           )}
+                        </td>
+                        <td className="p-4 text-sm text-slate-600">
+                          <span className="block font-mono text-xs">{r.fromDepartmentId ?? "—"}</span>
+                          <span className="block text-xs text-slate-400">to</span>
+                          <span className="block font-mono text-xs">{r.toDepartmentId ?? "—"}</span>
                         </td>
                         <td className="p-4">
                           <span

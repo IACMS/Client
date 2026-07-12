@@ -11,6 +11,8 @@ export type ApiReferral = {
   status: string;
   fromTenantId?: string;
   toTenantId?: string;
+  fromDepartmentId?: string | null;
+  toDepartmentId?: string | null;
   referralReason?: string | null;
   notes?: string | null;
   fromTenant?: TenantMini;
