@@ -30,6 +30,7 @@ import TasksPage from "./pages/TasksPage";
 import ReportsPage from "./pages/ReportsPage";
 import ChatPage from "./pages/ChatPage";
 import TenantSettingsPage from "./pages/TenantSettingsPage";
+import DepartmentsPage from "./pages/DepartmentsPage";
 import { useSession } from "./context/SessionContext";
 import { useEffect } from "react";
 
@@ -40,13 +41,22 @@ export default function App() {
     // Dynamic tenant branding injection
     const config = user?.tenant?.config;
     if (config?.primaryColor) {
-      document.documentElement.style.setProperty("--iacms-primary", config.primaryColor);
+      document.documentElement.style.setProperty(
+        "--iacms-primary",
+        config.primaryColor,
+      );
     }
     if (config?.secondaryColor) {
-      document.documentElement.style.setProperty("--iacms-secondary", config.secondaryColor);
+      document.documentElement.style.setProperty(
+        "--iacms-secondary",
+        config.secondaryColor,
+      );
     }
     if (config?.fontPreference) {
-      document.documentElement.style.setProperty("--font-family-body", config.fontPreference);
+      document.documentElement.style.setProperty(
+        "--font-family-body",
+        config.fontPreference,
+      );
     }
   }, [user?.tenant]);
 
@@ -54,60 +64,79 @@ export default function App() {
     <>
       <ForbiddenBanner />
       <Routes>
-      <Route path="/" element={<HomePage />} />
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/register" element={<RegisterPage />} />
-      <Route path="/register-organization" element={<TenantRegisterPage />} />
-      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-      <Route path="/reset-password" element={<ResetPasswordPage />} />
-      <Route path="/verify-email" element={<VerifyEmailPage />} />
+        <Route path="/" element={<HomePage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+        <Route path="/register-organization" element={<TenantRegisterPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/verify-email" element={<VerifyEmailPage />} />
 
-      <Route element={<RequireAuth />}>
-        <Route element={<DashboardLayout />}>
-          <Route path="/dashboard" element={<DashboardPage />} />
-          <Route element={<RequireRole permission="cases:read" />}>
-            <Route path="/tasks" element={<TasksPage />} />
-            <Route path="/reports" element={<ReportsPage />} />
-            <Route path="/chat" element={<ChatPage />} />
-          </Route>
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route element={<RequireRole permission="referrals:read" />}>
-            <Route path="/referrals" element={<ReferralsPage />} />
-          </Route>
-          <Route element={<RequireRole permission="audit:read" />}>
-            <Route path="/audit" element={<AuditPage />} />
-          </Route>
-          <Route element={<RequireRole permission="platform:manage_tenants" />}>
-            <Route path="/api-health" element={<ApiDiagnosticsPage />} />
+        <Route element={<RequireAuth />}>
+          <Route element={<DashboardLayout />}>
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route element={<RequireRole permission="cases:read" />}>
+              <Route path="/tasks" element={<TasksPage />} />
+              <Route path="/reports" element={<ReportsPage />} />
+              <Route path="/chat" element={<ChatPage />} />
+            </Route>
+            <Route path="/settings" element={<SettingsPage />} />
+            <Route element={<RequireRole permission="referrals:read" />}>
+              <Route path="/referrals" element={<ReferralsPage />} />
+            </Route>
+            <Route element={<RequireRole permission="audit:read" />}>
+              <Route path="/audit" element={<AuditPage />} />
+            </Route>
+            <Route
+              element={<RequireRole permission="platform:manage_tenants" />}
+            >
+              <Route path="/api-health" element={<ApiDiagnosticsPage />} />
+            </Route>
+
+            {/* Workflow list + graph: read shows the designer as view-only; mutations stay workflows:update. */}
+            <Route path="/workflows" element={<WorkflowsPage />} />
+            <Route
+              element={
+                <RequireRole anyOf={["workflows:read", "workflows:update"]} />
+              }
+            >
+              <Route
+                path="/workflows/:id/designer"
+                element={<WorkflowDesignerPage />}
+              />
+            </Route>
+
+            {/* Admin-only routes: hidden from non-admins in the UI and blocked here. */}
+            <Route element={<RequireAdmin />}>
+              <Route path="/settings/tenant" element={<TenantSettingsPage />} />
+              <Route
+                path="/settings/departments"
+                element={<DepartmentsPage />}
+              />
+              <Route path="/users" element={<UsersPage />} />
+            </Route>
           </Route>
 
-          {/* Workflow list + graph: read shows the designer as view-only; mutations stay workflows:update. */}
-          <Route path="/workflows" element={<WorkflowsPage />} />
-          <Route element={<RequireRole anyOf={["workflows:read", "workflows:update"]} />}>
-            <Route path="/workflows/:id/designer" element={<WorkflowDesignerPage />} />
+          <Route element={<CasesLayout />}>
+            <Route path="/cases" element={<CasesPage />} />
+            <Route path="/cases/:caseId" element={<CaseDetailPage />} />
           </Route>
 
-          {/* Admin-only routes: hidden from non-admins in the UI and blocked here. */}
-          <Route element={<RequireAdmin />}>
-            <Route path="/settings/tenant" element={<TenantSettingsPage />} />
-            <Route path="/users" element={<UsersPage />} />
+          <Route element={<AgenciesLayout />}>
+            <Route path="/agencies" element={<AgenciesPage />} />
+            <Route
+              path="/agencies/:agencySlug"
+              element={<AgencyDetailPage />}
+            />
           </Route>
+
+          <Route
+            path="/settings/api-check"
+            element={<Navigate to="/api-health" replace />}
+          />
         </Route>
 
-        <Route element={<CasesLayout />}>
-          <Route path="/cases" element={<CasesPage />} />
-          <Route path="/cases/:caseId" element={<CaseDetailPage />} />
-        </Route>
-
-        <Route element={<AgenciesLayout />}>
-          <Route path="/agencies" element={<AgenciesPage />} />
-          <Route path="/agencies/:agencySlug" element={<AgencyDetailPage />} />
-        </Route>
-
-        <Route path="/settings/api-check" element={<Navigate to="/api-health" replace />} />
-      </Route>
-
-      <Route path="*" element={<NotFoundPage />} />
+        <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </>
   );

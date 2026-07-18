@@ -27,12 +27,21 @@ export type SessionTenant = {
   };
 };
 
+export type SessionDepartment = {
+  id: string;
+  code?: string;
+  name?: string;
+  description?: string | null;
+};
+
 export type SessionUser = {
   id: string;
   email: string;
   firstName?: string;
   lastName?: string;
   departmentId?: string | null;
+  /** Resolved department object — populated from the departments API after session loads. */
+  department?: SessionDepartment | null;
   /** When true, user must change password (new admin-created account, etc.). */
   mustChangePassword?: boolean;
   /** Cookie session includes nested tenant; JWT auth returns flat tenantId from `/session/status`. */
@@ -68,10 +77,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [status, setStatus] = useState<"loading" | "ready">("loading");
   const [forbiddenMessage, setForbiddenMessage] = useState<string | null>(null);
-  const clearForbiddenMessage = useCallback(() => setForbiddenMessage(null), []);
+  const clearForbiddenMessage = useCallback(
+    () => setForbiddenMessage(null),
+    [],
+  );
 
   const refresh = useCallback(async () => {
-    const data = (await apiGet("/api/v1/session/status")) as SessionStatusPayload;
+    const data = (await apiGet(
+      "/api/v1/session/status",
+    )) as SessionStatusPayload;
     if (data.authenticated && data.user) {
       const nextUser: SessionUser = {
         ...data.user,
@@ -92,13 +106,32 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       // Gateway blocks most routes until password is changed; skip tenant fetch to avoid a false 403 toast.
       if (tenantId && !nextUser.mustChangePassword) {
         try {
-          const t = (await apiGet(`/api/v1/tenants/${tenantId}`)) as { tenant?: SessionTenant } | null;
+          const t = (await apiGet(`/api/v1/tenants/${tenantId}`)) as {
+            tenant?: SessionTenant;
+          } | null;
           if (t?.tenant) {
             nextUser.tenant = { ...(nextUser.tenant ?? {}), ...t.tenant };
-            if (!nextUser.tenant.id && resolvedTenantId) nextUser.tenant.id = resolvedTenantId;
+            if (!nextUser.tenant.id && resolvedTenantId)
+              nextUser.tenant.id = resolvedTenantId;
           }
         } catch {
           // ignore tenant hydration errors (session still valid)
+        }
+      }
+      // Hydrate department name/code from the tenant's departments list
+      if (tenantId && nextUser.departmentId && !nextUser.mustChangePassword) {
+        try {
+          const d = (await apiGet(
+            `/api/v1/tenants/${tenantId}/departments`,
+          )) as {
+            departments?: SessionDepartment[];
+          } | null;
+          const found = d?.departments?.find(
+            (dep) => dep.id === nextUser.departmentId,
+          );
+          if (found) nextUser.department = found;
+        } catch {
+          // ignore department hydration errors
         }
       }
       setUser(nextUser);
@@ -159,7 +192,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     [user, status, refresh, logout, forbiddenMessage, clearForbiddenMessage],
   );
 
-  return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
+  return (
+    <SessionContext.Provider value={value}>{children}</SessionContext.Provider>
+  );
 }
 
 export function useSession(): SessionContextValue {

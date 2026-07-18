@@ -12,7 +12,13 @@ import {
 
 export type { ApiReferral };
 
-type WorkflowOption = { id: string; name: string; key: string; version: number; status?: string };
+type WorkflowOption = {
+  id: string;
+  name: string;
+  key: string;
+  version: number;
+  status?: string;
+};
 type DepartmentOption = { id: string; code?: string; name?: string };
 type TenantUserOption = {
   id: string;
@@ -58,11 +64,16 @@ function ReferralsList({
       setErr(null);
       try {
         const q = new URLSearchParams({ caseId });
-        const data = (await apiGet(`/api/v1/referrals?${q}`)) as { referrals?: ApiReferral[] };
-        if (!cancelled) setRows(Array.isArray(data.referrals) ? data.referrals : []);
+        const data = (await apiGet(`/api/v1/referrals?${q}`)) as {
+          referrals?: ApiReferral[];
+        };
+        if (!cancelled)
+          setRows(Array.isArray(data.referrals) ? data.referrals : []);
       } catch (e) {
         if (!cancelled)
-          setErr(e instanceof ApiError ? e.message : t("modals.referral.loadFailed"));
+          setErr(
+            e instanceof ApiError ? e.message : t("modals.referral.loadFailed"),
+          );
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -75,7 +86,9 @@ function ReferralsList({
   if (loading) {
     return (
       <p className="text-sm text-slate-500 flex items-center gap-2">
-        <span className="material-symbols-outlined text-lg animate-pulse">progress_activity</span>
+        <span className="material-symbols-outlined text-lg animate-pulse">
+          progress_activity
+        </span>
         {t("common.loading")}
       </p>
     );
@@ -84,7 +97,11 @@ function ReferralsList({
     return <p className="text-sm text-red-700">{err}</p>;
   }
   if (rows.length === 0) {
-    return <p className="text-sm text-slate-600">{t("modals.referral.noReferrals")}</p>;
+    return (
+      <p className="text-sm text-slate-600">
+        {t("modals.referral.noReferrals")}
+      </p>
+    );
   }
   return (
     <ul className="divide-y divide-slate-200 border border-slate-200 rounded-lg overflow-hidden bg-white">
@@ -102,16 +119,32 @@ function ReferralsList({
                 {r.status}
               </span>
             </div>
-            {r.referralReason && <p className="text-slate-600 mt-2">{r.referralReason}</p>}
-            {(r.fromDepartmentId || r.toDepartmentId) && (
+            {r.referralReason && (
+              <p className="text-slate-600 mt-2">{r.referralReason}</p>
+            )}
+            {(r.fromDepartment ||
+              r.fromDepartmentId ||
+              r.toDepartment ||
+              r.toDepartmentId) && (
               <p className="text-xs text-slate-500 mt-2">
-                Departments: {r.fromDepartmentId ?? "—"} → {r.toDepartmentId ?? "—"}
+                Dept:{" "}
+                {r.fromDepartment?.name ??
+                  r.fromDepartment?.code ??
+                  (r.fromDepartmentId
+                    ? r.fromDepartmentId.slice(0, 8) + "…"
+                    : "—")}{" "}
+                →{" "}
+                {r.toDepartment?.name ??
+                  r.toDepartment?.code ??
+                  (r.toDepartmentId ? r.toDepartmentId.slice(0, 8) + "…" : "—")}
               </p>
             )}
             {direction === "outgoing" && r.progress && (
               <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[11px] font-semibold uppercase text-slate-500">Progress</span>
+                  <span className="text-[11px] font-semibold uppercase text-slate-500">
+                    Progress
+                  </span>
                   <span
                     className={`text-[11px] font-bold px-2 py-0.5 rounded ${referralProgressClass(r.progress.range)}`}
                   >
@@ -168,6 +201,9 @@ export default function CaseReferralsPanel({
   const [myDepartments, setMyDepartments] = useState<DepartmentOption[]>([]);
   const [fromDepartmentId, setFromDepartmentId] = useState("");
   const [toDepartmentId, setToDepartmentId] = useState("");
+  const [toTenantId, setToTenantId] = useState("");
+  const [toTenantDepts, setToTenantDepts] = useState<DepartmentOption[]>([]);
+  const [loadingToDepts, setLoadingToDepts] = useState(false);
   const [workflowId, setWorkflowId] = useState("");
   const [assignedToUserId, setAssignedToUserId] = useState("");
   const [assignBusy, setAssignBusy] = useState(false);
@@ -188,10 +224,15 @@ export default function CaseReferralsPanel({
     let cancelled = false;
     (async () => {
       try {
-        const data = (await apiGet(`/api/v1/tenants/${encodeURIComponent(fromTenantId)}/departments`)) as {
+        const data = (await apiGet(
+          `/api/v1/tenants/${encodeURIComponent(fromTenantId)}/departments`,
+        )) as {
           departments?: DepartmentOption[];
         };
-        if (!cancelled) setMyDepartments(Array.isArray(data.departments) ? data.departments : []);
+        if (!cancelled)
+          setMyDepartments(
+            Array.isArray(data.departments) ? data.departments : [],
+          );
       } catch {
         if (!cancelled) setMyDepartments([]);
       }
@@ -201,13 +242,44 @@ export default function CaseReferralsPanel({
     };
   }, [fromTenantId]);
 
+  // Load target tenant's departments when toTenantId is set
+  useEffect(() => {
+    if (!toTenantId) {
+      setToTenantDepts([]);
+      return;
+    }
+    let cancelled = false;
+    setLoadingToDepts(true);
+    (async () => {
+      try {
+        const data = (await apiGet(
+          `/api/v1/tenants/${encodeURIComponent(toTenantId)}/departments`,
+        )) as { departments?: DepartmentOption[] };
+        if (!cancelled)
+          setToTenantDepts(
+            Array.isArray(data.departments) ? data.departments : [],
+          );
+      } catch {
+        if (!cancelled) setToTenantDepts([]);
+      } finally {
+        if (!cancelled) setLoadingToDepts(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [toTenantId]);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const q = new URLSearchParams({ caseId });
-        const data = (await apiGet(`/api/v1/referrals?${q}`)) as { referrals?: ApiReferral[] };
-        if (!cancelled) setRows(Array.isArray(data.referrals) ? data.referrals : []);
+        const data = (await apiGet(`/api/v1/referrals?${q}`)) as {
+          referrals?: ApiReferral[];
+        };
+        if (!cancelled)
+          setRows(Array.isArray(data.referrals) ? data.referrals : []);
       } catch {
         if (!cancelled) setRows([]);
       }
@@ -228,10 +300,13 @@ export default function CaseReferralsPanel({
         ]);
         if (cancelled) return;
         const workflows =
-          (workflowPayload as { workflows?: WorkflowOption[] }).workflows?.filter(
+          (
+            workflowPayload as { workflows?: WorkflowOption[] }
+          ).workflows?.filter(
             (workflow) => workflow.key !== "referral-intake",
           ) ?? [];
-        const users = (usersPayload as { users?: TenantUserOption[] }).users ?? [];
+        const users =
+          (usersPayload as { users?: TenantUserOption[] }).users ?? [];
         setWorkflowOptions(workflows);
         setTenantUsers(users.filter((user) => user.isActive));
       } catch {
@@ -256,30 +331,42 @@ export default function CaseReferralsPanel({
     setMsg(null);
     setSubmitting(true);
     try {
-      const v = (await apiGet(`/api/v1/tenants/validate/${encodeURIComponent(code)}`)) as {
+      const v = (await apiGet(
+        `/api/v1/tenants/validate/${encodeURIComponent(code)}`,
+      )) as {
         valid?: boolean;
         tenant?: { id: string };
       };
-      const toTenantId = v.tenant?.id;
-      if (!v.valid || !toTenantId) {
+      const resolvedToTenantId = v.tenant?.id;
+      if (!v.valid || !resolvedToTenantId) {
         setMsg(t("modals.referral.unknownTenant"));
         setSubmitting(false);
         return;
       }
-      if (toTenantId === fromTenantId) {
+      if (resolvedToTenantId === fromTenantId) {
         setMsg(t("modals.referral.partnerMustDiffer"));
         setSubmitting(false);
         return;
       }
+      // Load that tenant's departments into the dropdown
+      if (resolvedToTenantId !== toTenantId) {
+        setToTenantId(resolvedToTenantId);
+        setToDepartmentId("");
+        setSubmitting(false);
+        setMsg(
+          "Partner tenant found! Select the receiving department below, then submit again.",
+        );
+        return;
+      }
       if (!fromDepartmentId || !toDepartmentId) {
-        setMsg("Select both the sending and receiving department IDs.");
+        setMsg("Select both the sending and receiving department.");
         setSubmitting(false);
         return;
       }
       await apiPost("/api/v1/referrals", {
         caseId,
         fromTenantId,
-        toTenantId,
+        toTenantId: resolvedToTenantId,
         fromDepartmentId,
         toDepartmentId,
         referredBy: userId,
@@ -288,10 +375,15 @@ export default function CaseReferralsPanel({
       setPartnerCode("");
       setReason("");
       setToDepartmentId("");
+      setToTenantId("");
       setListVersion((x) => x + 1);
       setMsg(t("modals.referral.created"));
     } catch (err) {
-      setMsg(err instanceof ApiError ? err.message : t("modals.referral.createFailed"));
+      setMsg(
+        err instanceof ApiError
+          ? err.message
+          : t("modals.referral.createFailed"),
+      );
     } finally {
       setSubmitting(false);
     }
@@ -317,7 +409,11 @@ export default function CaseReferralsPanel({
       setListVersion((x) => x + 1);
       onRefresh?.();
     } catch (err) {
-      setAssignMsg(err instanceof ApiError ? err.message : "Could not assign referral workflow.");
+      setAssignMsg(
+        err instanceof ApiError
+          ? err.message
+          : "Could not assign referral workflow.",
+      );
     } finally {
       setAssignBusy(false);
     }
@@ -327,7 +423,9 @@ export default function CaseReferralsPanel({
     <div className="p-lg space-y-lg max-w-3xl">
       <div>
         <h3 className="font-h3 text-primary mb-2">
-          {canCreate ? "Refer this case to a partner tenant" : "Referrals for this case"}
+          {canCreate
+            ? "Refer this case to a partner tenant"
+            : "Referrals for this case"}
         </h3>
         <p className="text-sm text-slate-600">
           {canCreate
@@ -336,71 +434,109 @@ export default function CaseReferralsPanel({
         </p>
       </div>
       {canCreate && (
-      <form onSubmit={handleSubmit} className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
-        {msg && (
-          <p
-            className={`text-sm ${msg.includes("created") && !msg.includes("not") ? "text-teal-800" : "text-red-700"}`}
-          >
-            {msg}
-          </p>
-        )}
-        <div className="grid sm:grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1">From department</label>
-            <select
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
-              value={fromDepartmentId}
-              onChange={(e) => setFromDepartmentId(e.target.value)}
+        <form
+          onSubmit={handleSubmit}
+          className="bg-white border border-slate-200 rounded-xl p-4 space-y-3"
+        >
+          {msg && (
+            <p
+              className={`text-sm ${msg.includes("created") && !msg.includes("not") ? "text-teal-800" : "text-red-700"}`}
             >
-              <option value="">Select department</option>
-              {myDepartments.map((dept) => (
-                <option key={dept.id} value={dept.id}>
-                  {dept.name ?? dept.code ?? dept.id}
-                </option>
-              ))}
-            </select>
+              {msg}
+            </p>
+          )}
+          <div className="grid sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">
+                From department
+              </label>
+              <select
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                value={fromDepartmentId}
+                onChange={(e) => setFromDepartmentId(e.target.value)}
+              >
+                <option value="">Select department</option>
+                {myDepartments.map((dept) => (
+                  <option key={dept.id} value={dept.id}>
+                    {dept.name ?? dept.code ?? dept.id}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">
+                To department
+                {toTenantId && (
+                  <span className="ml-1 text-teal-600 font-normal">
+                    (partner tenant loaded)
+                  </span>
+                )}
+              </label>
+              {toTenantId ? (
+                <select
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                  value={toDepartmentId}
+                  onChange={(e) => setToDepartmentId(e.target.value)}
+                  disabled={loadingToDepts}
+                >
+                  <option value="">
+                    {loadingToDepts
+                      ? "Loading departments…"
+                      : "Select receiving department"}
+                  </option>
+                  {toTenantDepts.map((dept) => (
+                    <option key={dept.id} value={dept.id}>
+                      {dept.name ?? dept.code ?? dept.id}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <p className="text-xs text-slate-500 italic">
+                  Enter the partner tenant code and validate first — department
+                  dropdown will appear here.
+                </p>
+              )}
+            </div>
           </div>
           <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1">To department ID</label>
+            <label
+              className="block text-xs font-semibold text-slate-600 mb-1"
+              htmlFor="ref-code"
+            >
+              {t("modals.referral.partnerCode")}
+            </label>
             <input
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono"
-              value={toDepartmentId}
-              onChange={(e) => setToDepartmentId(e.target.value)}
-              placeholder="Paste target department UUID"
+              id="ref-code"
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono uppercase"
+              value={partnerCode}
+              onChange={(e) => setPartnerCode(e.target.value)}
+              placeholder="e.g. PARTNER-ORG"
             />
           </div>
-        </div>
-        <div>
-          <label className="block text-xs font-semibold text-slate-600 mb-1" htmlFor="ref-code">
-            {t("modals.referral.partnerCode")}
-          </label>
-          <input
-            id="ref-code"
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono uppercase"
-            value={partnerCode}
-            onChange={(e) => setPartnerCode(e.target.value)}
-            placeholder="e.g. PARTNER-ORG"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-semibold text-slate-600 mb-1" htmlFor="ref-reason">
-            {t("common.description")} ({t("common.optional")})
-          </label>
-          <textarea
-            id="ref-reason"
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm min-h-[72px]"
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-          />
-        </div>
-        <button
-          type="submit"
-          disabled={submitting}
-          className="bg-primary-container text-white text-sm font-semibold px-4 py-2 rounded-lg disabled:opacity-50"
-        >
-          {submitting ? t("modals.referral.submitting") : t("modals.referral.newReferral")}
-        </button>
-      </form>
+          <div>
+            <label
+              className="block text-xs font-semibold text-slate-600 mb-1"
+              htmlFor="ref-reason"
+            >
+              {t("common.description")} ({t("common.optional")})
+            </label>
+            <textarea
+              id="ref-reason"
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm min-h-[72px]"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={submitting}
+            className="bg-primary-container text-white text-sm font-semibold px-4 py-2 rounded-lg disabled:opacity-50"
+          >
+            {submitting
+              ? t("modals.referral.submitting")
+              : t("modals.referral.newReferral")}
+          </button>
+        </form>
       )}
       {pendingInboundAssignment && (
         <form
@@ -408,18 +544,25 @@ export default function CaseReferralsPanel({
           className="bg-white border border-teal-200 rounded-xl p-4 space-y-3"
         >
           <div>
-            <h4 className="font-semibold text-teal-900">Assign local workflow and case taker</h4>
+            <h4 className="font-semibold text-teal-900">
+              Assign local workflow and case taker
+            </h4>
             <p className="text-sm text-slate-600 mt-1">
-              This referral has been accepted. Choose the receiving agency workflow and assignee before work begins.
+              This referral has been accepted. Choose the receiving agency
+              workflow and assignee before work begins.
             </p>
           </div>
           {assignMsg && (
-            <p className={`text-sm ${assignMsg.includes("successfully") ? "text-teal-800" : "text-red-700"}`}>
+            <p
+              className={`text-sm ${assignMsg.includes("successfully") ? "text-teal-800" : "text-red-700"}`}
+            >
               {assignMsg}
             </p>
           )}
           <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1">Workflow</label>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">
+              Workflow
+            </label>
             <select
               className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
               value={workflowId}
@@ -434,7 +577,9 @@ export default function CaseReferralsPanel({
             </select>
           </div>
           <div>
-            <label className="block text-xs font-semibold text-slate-600 mb-1">Case taker</label>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">
+              Case taker
+            </label>
             <select
               className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
               value={assignedToUserId}
@@ -458,7 +603,9 @@ export default function CaseReferralsPanel({
         </form>
       )}
       <div>
-        <h4 className="font-label-caps text-slate-500 mb-2">Existing referrals</h4>
+        <h4 className="font-label-caps text-slate-500 mb-2">
+          Existing referrals
+        </h4>
         <ReferralsList
           caseId={caseId}
           version={listVersion}

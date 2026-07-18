@@ -16,6 +16,8 @@ type ProfileUser = {
   phone?: string | null;
   isEmailVerified?: boolean;
   tenant?: { id?: string; name?: string; code?: string };
+  department?: { id?: string; code?: string; name?: string } | null;
+  departmentId?: string | null;
 };
 
 export default function SettingsPage() {
@@ -56,7 +58,9 @@ export default function SettingsPage() {
       setLoading(true);
       setProfileError(null);
       try {
-        const data = (await apiGet("/api/v1/auth/profile")) as { user?: ProfileUser };
+        const data = (await apiGet("/api/v1/auth/profile")) as {
+          user?: ProfileUser;
+        };
         if (cancelled || !data?.user) return;
         const u = data.user;
         setProfile(u);
@@ -65,7 +69,9 @@ export default function SettingsPage() {
         setPhone(u.phone ?? "");
       } catch (err) {
         if (!cancelled) {
-          setProfileError(err instanceof ApiError ? err.message : t("settings.loadFailed"));
+          setProfileError(
+            err instanceof ApiError ? err.message : t("settings.loadFailed"),
+          );
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -82,8 +88,10 @@ export default function SettingsPage() {
     setProfileSaving(true);
     try {
       const body: Record<string, string | null> = {};
-      if ((firstName || "") !== (profile?.firstName ?? "")) body.firstName = firstName.trim();
-      if ((lastName || "") !== (profile?.lastName ?? "")) body.lastName = lastName.trim();
+      if ((firstName || "") !== (profile?.firstName ?? ""))
+        body.firstName = firstName.trim();
+      if ((lastName || "") !== (profile?.lastName ?? ""))
+        body.lastName = lastName.trim();
       const pTrim = phone.trim();
       const prev = profile?.phone ?? "";
       if (pTrim !== prev) body.phone = pTrim || null;
@@ -98,7 +106,9 @@ export default function SettingsPage() {
       setProfileSaved(t("settings.profileUpdated"));
     } catch (err) {
       setProfileSavedOk(false);
-      setProfileSaved(err instanceof ApiError ? err.message : t("settings.updateFailed"));
+      setProfileSaved(
+        err instanceof ApiError ? err.message : t("settings.updateFailed"),
+      );
     } finally {
       setProfileSaving(false);
     }
@@ -120,10 +130,13 @@ export default function SettingsPage() {
     try {
       const wasForced = mustChangeFirst;
       const from =
-        (location.state as { from?: string } | null)?.from && typeof (location.state as { from?: string }).from === "string"
+        (location.state as { from?: string } | null)?.from &&
+        typeof (location.state as { from?: string }).from === "string"
           ? (location.state as { from: string }).from
           : null;
-      const body: { newPassword: string; currentPassword?: string } = { newPassword };
+      const body: { newPassword: string; currentPassword?: string } = {
+        newPassword,
+      };
       if (!mustChangeFirst) body.currentPassword = currentPassword;
       await apiPost("/api/v1/auth/change-password", body);
       setCurrentPassword("");
@@ -133,18 +146,29 @@ export default function SettingsPage() {
       setPwdMessage(t("settings.passwordChanged"));
       await refreshSession();
       if (wasForced) {
-        const dest = from && from !== "/settings" && !from.startsWith("/settings/") ? from : "/dashboard";
+        const dest =
+          from && from !== "/settings" && !from.startsWith("/settings/")
+            ? from
+            : "/dashboard";
         navigate(dest, { replace: true });
       }
     } catch (err) {
       setPwdMessageOk(false);
-      setPwdMessage(err instanceof ApiError ? err.message : t("settings.passwordChangeFailed"));
+      setPwdMessage(
+        err instanceof ApiError
+          ? err.message
+          : t("settings.passwordChangeFailed"),
+      );
     } finally {
       setPwdSaving(false);
     }
   }
 
-  function passwordFormSection(options: { heading: string; intro?: string; firstLogin?: boolean }) {
+  function passwordFormSection(options: {
+    heading: string;
+    intro?: string;
+    firstLogin?: boolean;
+  }) {
     const firstLogin = options.firstLogin === true;
     const canSubmit =
       isPasswordValid(newPassword) &&
@@ -154,7 +178,9 @@ export default function SettingsPage() {
     return (
       <section className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
         <h2 className="font-h3 text-teal-900 mb-2">{options.heading}</h2>
-        {options.intro ? <p className="text-sm text-slate-600 mb-4">{options.intro}</p> : null}
+        {options.intro ? (
+          <p className="text-sm text-slate-600 mb-4">{options.intro}</p>
+        ) : null}
         <form className="space-y-4 max-w-md" onSubmit={changePassword}>
           {!firstLogin ? (
             <PasswordInput
@@ -184,14 +210,22 @@ export default function SettingsPage() {
             required
           />
           {pwdMessage && (
-            <p className={`text-sm ${pwdMessageOk ? "text-teal-800" : "text-red-700"}`}>{pwdMessage}</p>
+            <p
+              className={`text-sm ${pwdMessageOk ? "text-teal-800" : "text-red-700"}`}
+            >
+              {pwdMessage}
+            </p>
           )}
           <button
             type="submit"
             disabled={pwdSaving || !canSubmit}
             className="bg-slate-800 text-white text-sm font-semibold px-4 py-2 rounded-lg disabled:opacity-50"
           >
-            {pwdSaving ? t("settings.updating") : firstLogin ? t("settings.setPasswordContinue") : t("settings.updatePassword")}
+            {pwdSaving
+              ? t("settings.updating")
+              : firstLogin
+                ? t("settings.setPasswordContinue")
+                : t("settings.updatePassword")}
           </button>
         </form>
       </section>
@@ -202,14 +236,17 @@ export default function SettingsPage() {
     return (
       <div className="p-gutter max-w-2xl space-y-6 pb-12">
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-amber-950">
-          <h1 className="font-h2 text-primary mb-2">{t("settings.forcedTitle")}</h1>
+          <h1 className="font-h2 text-primary mb-2">
+            {t("settings.forcedTitle")}
+          </h1>
           <p className="text-sm text-amber-900">{t("settings.forcedIntro")}</p>
           <p className="text-sm text-slate-700 mt-2 font-mono">
             {sessionUser?.email}
             {sessionUser?.tenant?.code ? (
               <span className="font-sans text-slate-600">
                 {" "}
-                · Tenant <span className="font-mono">{sessionUser.tenant.code}</span>
+                · Tenant{" "}
+                <span className="font-mono">{sessionUser.tenant.code}</span>
               </span>
             ) : null}
           </p>
@@ -225,7 +262,9 @@ export default function SettingsPage() {
   if (loading) {
     return (
       <div className="p-gutter flex items-center gap-2 text-slate-600">
-        <span className="material-symbols-outlined animate-pulse">progress_activity</span>
+        <span className="material-symbols-outlined animate-pulse">
+          progress_activity
+        </span>
         {t("settings.loadingProfile")}
       </div>
     );
@@ -234,8 +273,13 @@ export default function SettingsPage() {
   if (profileError || !profile) {
     return (
       <div className="p-gutter max-w-xl">
-        <p className="text-red-700 text-sm mb-4">{profileError ?? t("settings.noProfile")}</p>
-        <Link to="/dashboard" className="text-primary font-semibold text-sm hover:underline">
+        <p className="text-red-700 text-sm mb-4">
+          {profileError ?? t("settings.noProfile")}
+        </p>
+        <Link
+          to="/dashboard"
+          className="text-primary font-semibold text-sm hover:underline"
+        >
           {t("settings.backToDashboard")}
         </Link>
       </div>
@@ -254,12 +298,26 @@ export default function SettingsPage() {
               · Tenant <span className="font-mono">{profile.tenant.code}</span>
             </span>
           ) : null}
+          {(profile.department?.name ?? sessionUser?.department?.name) ? (
+            <span className="text-slate-500">
+              {" "}
+              ·{" "}
+              <span className="material-symbols-outlined text-xs align-middle">
+                corporate_fare
+              </span>{" "}
+              {profile.department?.name ?? sessionUser?.department?.name}
+            </span>
+          ) : null}
         </p>
       </div>
 
       <section className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
-        <h2 className="font-h3 text-teal-900 mb-2">{t("settings.languageSection")}</h2>
-        <p className="text-sm text-slate-600 mb-4">{t("settings.languageHint")}</p>
+        <h2 className="font-h3 text-teal-900 mb-2">
+          {t("settings.languageSection")}
+        </h2>
+        <p className="text-sm text-slate-600 mb-4">
+          {t("settings.languageHint")}
+        </p>
         <LanguageSwitcher variant="full" className="max-w-md" />
       </section>
 
@@ -268,7 +326,10 @@ export default function SettingsPage() {
         <form className="space-y-4" onSubmit={saveProfile}>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-label-caps text-slate-500 mb-1 uppercase" htmlFor="fn">
+              <label
+                className="block text-xs font-label-caps text-slate-500 mb-1 uppercase"
+                htmlFor="fn"
+              >
                 {t("settings.firstName")}
               </label>
               <input
@@ -279,7 +340,10 @@ export default function SettingsPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-label-caps text-slate-500 mb-1 uppercase" htmlFor="ln">
+              <label
+                className="block text-xs font-label-caps text-slate-500 mb-1 uppercase"
+                htmlFor="ln"
+              >
                 {t("settings.lastName")}
               </label>
               <input
@@ -291,7 +355,10 @@ export default function SettingsPage() {
             </div>
           </div>
           <div>
-            <label className="block text-xs font-label-caps text-slate-500 mb-1 uppercase" htmlFor="ph">
+            <label
+              className="block text-xs font-label-caps text-slate-500 mb-1 uppercase"
+              htmlFor="ph"
+            >
               {t("settings.phone")}
             </label>
             <input
@@ -303,7 +370,11 @@ export default function SettingsPage() {
             />
           </div>
           {profileSaved && (
-            <p className={`text-sm ${profileSavedOk ? "text-teal-800" : "text-red-700"}`}>{profileSaved}</p>
+            <p
+              className={`text-sm ${profileSavedOk ? "text-teal-800" : "text-red-700"}`}
+            >
+              {profileSaved}
+            </p>
           )}
           <button
             type="submit"

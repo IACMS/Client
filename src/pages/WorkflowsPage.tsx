@@ -13,6 +13,7 @@ type ApiWorkflow = {
   name: string;
   description?: string;
   departmentId?: string | null;
+  department?: { id?: string; code?: string; name?: string } | null;
   status: "DRAFT" | "PUBLISHED" | "ARCHIVED";
   version: number;
   updatedAt: string;
@@ -28,7 +29,9 @@ export default function WorkflowsPage() {
   const { can } = usePermissions();
   const canConfigure = can("workflows:update");
   const [workflows, setWorkflows] = useState<ApiWorkflow[]>([]);
-  const [loadState, setLoadState] = useState<"loading" | "ok" | "error">("loading");
+  const [loadState, setLoadState] = useState<"loading" | "ok" | "error">(
+    "loading",
+  );
   const [createOpen, setCreateOpen] = useState(false);
 
   useEffect(() => {
@@ -66,11 +69,17 @@ export default function WorkflowsPage() {
         <div>
           <div className="flex items-center gap-2 text-slate-500 font-label-caps text-xs mb-2 flex-wrap">
             <span>{t("portal.breadcrumb.portal")}</span>
-            <span className="material-symbols-outlined text-xs">chevron_right</span>
-            <span className="text-primary font-bold">{t("portal.breadcrumb.workflows")}</span>
+            <span className="material-symbols-outlined text-xs">
+              chevron_right
+            </span>
+            <span className="text-primary font-bold">
+              {t("portal.breadcrumb.workflows")}
+            </span>
           </div>
           <h1 className="font-h1 text-primary">{t("workflows.title")}</h1>
-          <p className="font-body-md text-slate-600 mt-1">{t("workflows.subtitle")}</p>
+          <p className="font-body-md text-slate-600 mt-1">
+            {t("workflows.subtitle")}
+          </p>
         </div>
         <Can permission="workflows:create">
           <button
@@ -85,29 +94,60 @@ export default function WorkflowsPage() {
         </Can>
       </div>
 
-      {loadState === "loading" && <div className="p-12 text-center text-slate-500"><span className="material-symbols-outlined animate-spin text-3xl">sync</span></div>}
-      
+      {loadState === "loading" && (
+        <div className="p-12 text-center text-slate-500">
+          <span className="material-symbols-outlined animate-spin text-3xl">
+            sync
+          </span>
+        </div>
+      )}
+
       {loadState === "ok" && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {workflows.map(wf => (
-            <div key={wf.id} className="bg-white border border-outline-variant rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow flex flex-col">
+          {workflows.map((wf) => (
+            <div
+              key={wf.id}
+              className="bg-white border border-outline-variant rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow flex flex-col"
+            >
               <div className="flex justify-between items-start mb-4">
-                <span className={`px-2 py-1 rounded text-xs font-bold ${wf.status === 'PUBLISHED' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>
+                <span
+                  className={`px-2 py-1 rounded text-xs font-bold ${wf.status === "PUBLISHED" ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600"}`}
+                >
                   {wf.status}
                 </span>
-                <span className="text-xs text-slate-400 font-mono">v{wf.version}</span>
+                <span className="text-xs text-slate-400 font-mono">
+                  v{wf.version}
+                </span>
               </div>
               <h3 className="font-h3 text-slate-800 mb-2">{wf.name}</h3>
-              <p className="text-sm text-slate-500 mb-6 flex-1">{wf.description}</p>
-              <p className="text-xs text-slate-400 mb-4">
-                Scope: {wf.departmentId ? "Department-specific" : "Tenant-wide"}
+              <p className="text-sm text-slate-500 mb-6 flex-1">
+                {wf.description}
               </p>
-              
+              <p className="text-xs text-slate-400 mb-4 flex items-center gap-1">
+                <span className="material-symbols-outlined text-xs">
+                  {wf.departmentId ? "corporate_fare" : "account_balance"}
+                </span>
+                {wf.departmentId
+                  ? (wf.department?.name ??
+                    wf.department?.code ??
+                    "Department-specific")
+                  : "Tenant-wide"}
+              </p>
+
               <div className="pt-4 border-t border-slate-100 flex justify-between items-center">
-                <span className="text-xs text-slate-400">{t("workflows.keyLabel", { key: wf.key })}</span>
-                <Link to={`/workflows/${wf.id}/designer`} className="text-primary hover:text-teal-700 font-semibold text-sm flex items-center gap-1">
-                  {wf.status === 'DRAFT' ? t("workflows.openDesigner") : t("workflows.viewGraph")}
-                  <span className="material-symbols-outlined text-sm">arrow_forward</span>
+                <span className="text-xs text-slate-400">
+                  {t("workflows.keyLabel", { key: wf.key })}
+                </span>
+                <Link
+                  to={`/workflows/${wf.id}/designer`}
+                  className="text-primary hover:text-teal-700 font-semibold text-sm flex items-center gap-1"
+                >
+                  {wf.status === "DRAFT"
+                    ? t("workflows.openDesigner")
+                    : t("workflows.viewGraph")}
+                  <span className="material-symbols-outlined text-sm">
+                    arrow_forward
+                  </span>
                 </Link>
               </div>
             </div>
