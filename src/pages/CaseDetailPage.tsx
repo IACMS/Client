@@ -8,8 +8,10 @@ import CaseWorkflowGuidePanel, { type WorkflowGuideStep } from "@/components/Cas
 import ExecuteTransitionModal from "@/components/ExecuteTransitionModal";
 import TransitionLetterModal, { type TransitionLetterResult } from "@/components/TransitionLetterModal";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import FileStatusBadge from "@/components/files/FileStatusBadge";
 import ForbiddenView from "@/components/ForbiddenView";
 import { useSession } from "@/context/SessionContext";
+import { useCaseFileUpload } from "@/hooks/useCaseFileUpload";
 import { usePermissions } from "@/permissions/usePermissions";
 import { ApiError, apiDelete, apiGet, apiPost, getApiBase, isAbortError } from "@/lib/api";
 import {
@@ -27,6 +29,16 @@ import {
   statusBadgeClass,
   tenantHoldsCaseCustody,
 } from "@/lib/casesApi";
+import {
+  deleteFile as deleteFmsFile,
+  downloadFile,
+  fmsFilePath,
+  FMS_CASE_SERVICE,
+  FMS_MODULE_LETTER,
+  openFileView,
+  parseFmsFileId,
+  uploadAndWaitAvailable,
+} from "@/lib/filesApi";
 import { fetchRbacRoles, roleNamesForIds, type RbacRoleRow } from "@/lib/workflowRoles";
 
 type CaseDetailResponse = { case?: ApiCase };
@@ -151,8 +163,10 @@ export default function CaseDetailPage() {
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
   const [attachmentBusy, setAttachmentBusy] = useState(false);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [attachmentFileActionId, setAttachmentFileActionId] = useState<string | null>(null);
   const [removeAttachmentId, setRemoveAttachmentId] = useState<string | null>(null);
   const [removeAttachmentBusy, setRemoveAttachmentBusy] = useState(false);
+  const caseFileUpload = useCaseFileUpload();
   const [unassignId, setUnassignId] = useState<string | null>(null);
   const [unassignBusy, setUnassignBusy] = useState(false);
   const [loadState, setLoadState] = useState<"loading" | "ok" | "error" | "forbidden">("loading");
@@ -301,15 +315,21 @@ export default function CaseDetailPage() {
 
   const registerLetterAttachment = async (letter: TransitionLetterResult) => {
     const blob = new Blob([letter.html], { type: "text/html;charset=utf-8" });
-    const fileSize = blob.size;
     const safe = letter.filename.replace(/[^a-zA-Z0-9._-]+/g, "_");
+    const fmsFile = await uploadAndWaitAvailable({
+      file: blob,
+      filename: safe.endsWith(".html") ? safe : `${safe}.html`,
+      service: FMS_CASE_SERVICE,
+      module: FMS_MODULE_LETTER,
+      referenceId: decodedId,
+    });
     await apiPost("/api/v1/attachments", {
       caseId: decodedId,
       filename: safe,
-      originalFilename: safe,
-      mimeType: "text/html",
-      fileSize,
-      filePath: `/uploads/metadata-only/${safe}`,
+      originalFilename: fmsFile.originalName || safe,
+      mimeType: fmsFile.mimeType || "text/html",
+      fileSize: fmsFile.size,
+      filePath: fmsFilePath(fmsFile.id),
       description: `Transition letter: ${execModal?.actionName ?? "workflow action"}`,
       ...(caseState?.currentStep?.id ? { workflowStepId: caseState.currentStep.id } : {}),
     });
@@ -423,27 +443,64 @@ export default function CaseDetailPage() {
       setAttachmentError(t("cases.detail.chooseFileError"));
       return;
     }
-    const safe = attachmentFile.name.replace(/[^a-zA-Z0-9._-]+/g, "_");
-    const filename = `${Date.now()}-${safe}`;
     setAttachmentBusy(true);
     try {
+      const fmsFile = await caseFileUpload.upload({
+        file: attachmentFile,
+        caseId: decodedId,
+      });
+      const safe = attachmentFile.name.replace(/[^a-zA-Z0-9._-]+/g, "_");
       await apiPost("/api/v1/attachments", {
         caseId: decodedId,
-        filename,
+        filename: `${Date.now()}-${safe}`,
         originalFilename: attachmentFile.name,
-        mimeType: attachmentFile.type || "application/octet-stream",
-        fileSize: attachmentFile.size,
-        filePath: `/uploads/metadata-only/${filename}`,
+        mimeType: fmsFile.mimeType || attachmentFile.type || "application/octet-stream",
+        fileSize: fmsFile.size,
+        filePath: fmsFilePath(fmsFile.id),
         description: attachmentDesc.trim() || undefined,
         ...(caseState?.currentStep?.id ? { workflowStepId: caseState.currentStep.id } : {}),
       });
       setAttachmentDesc("");
       setAttachmentFile(null);
+      caseFileUpload.reset();
       await loadCase();
     } catch (e) {
-      setAttachmentError(e instanceof ApiError ? e.message : t("cases.detail.attachmentFailed"));
+      if (isAbortError(e)) return;
+      setAttachmentError(
+        e instanceof ApiError
+          ? e.message
+          : caseFileUpload.error || t("cases.detail.attachmentFailed"),
+      );
     } finally {
       setAttachmentBusy(false);
+    }
+  };
+
+  const handleViewAttachment = async (att: ApiAttachmentRow) => {
+    const fileId = parseFmsFileId(att.filePath);
+    if (!fileId) return;
+    setAttachmentFileActionId(att.id);
+    setAttachmentError(null);
+    try {
+      await openFileView(fileId);
+    } catch (e) {
+      setAttachmentError(e instanceof ApiError ? e.message : t("cases.detail.viewFailed"));
+    } finally {
+      setAttachmentFileActionId(null);
+    }
+  };
+
+  const handleDownloadAttachment = async (att: ApiAttachmentRow) => {
+    const fileId = parseFmsFileId(att.filePath);
+    if (!fileId) return;
+    setAttachmentFileActionId(att.id);
+    setAttachmentError(null);
+    try {
+      await downloadFile(fileId, att.originalFilename || att.filename);
+    } catch (e) {
+      setAttachmentError(e instanceof ApiError ? e.message : t("cases.detail.downloadFailed"));
+    } finally {
+      setAttachmentFileActionId(null);
     }
   };
 
@@ -452,6 +509,15 @@ export default function CaseDetailPage() {
     setRemoveAttachmentBusy(true);
     setAttachmentError(null);
     try {
+      const att = attachmentsList.find((a) => a.id === removeAttachmentId);
+      const fmsId = att ? parseFmsFileId(att.filePath) : null;
+      if (fmsId) {
+        try {
+          await deleteFmsFile(fmsId);
+        } catch {
+          /* best-effort: still remove case attachment row */
+        }
+      }
       await apiDelete(`/api/v1/attachments/${removeAttachmentId}`);
       setRemoveAttachmentId(null);
       await loadCase();
@@ -563,7 +629,8 @@ export default function CaseDetailPage() {
   // Permission names mirror the gateway's RBAC route table — see
   // `IACMS/services/api-gateway/src/middleware/rbac.middleware.js`.
   const canAssign = can("cases:assign") && holdsCustody && !caseClosed && !incomingPendingReferral;
-  const canUpload = can("cases:update") && holdsCustody && !caseClosed && !incomingPendingReferral;
+  const canUpload = can("file:upload") && holdsCustody && !caseClosed && !incomingPendingReferral;
+  const canDeleteAttachment = can("file:delete") && holdsCustody && !caseClosed && !incomingPendingReferral;
   const canRefer = can("referrals:create") && holdsCustody && !caseClosed && !incomingPendingReferral;
 
   const transitionRoleLabels = useCallback((ids?: string[]) => roleNamesForIds(rbacRoles, ids), [rbacRoles]);
@@ -1294,22 +1361,47 @@ export default function CaseDetailPage() {
                   onChange={(e) => {
                     setAttachmentFile(e.target.files?.[0] ?? null);
                     setAttachmentError(null);
+                    caseFileUpload.reset();
                   }}
                   className="block w-full text-sm text-slate-600"
                 />
+                {attachmentFile && (
+                  <p className="text-xs text-secondary">
+                    {attachmentFile.name} · {formatBytes(attachmentFile.size)}
+                  </p>
+                )}
                 <textarea
                   className="w-full rounded-lg border border-outline-variant px-md py-sm text-body-sm min-h-[64px]"
                   placeholder={t("cases.detail.descriptionOptional")}
                   value={attachmentDesc}
                   onChange={(e) => setAttachmentDesc(e.target.value)}
                 />
+                {attachmentBusy && (
+                  <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
+                    {caseFileUpload.status ? (
+                      <FileStatusBadge status={caseFileUpload.status} />
+                    ) : null}
+                    <span>
+                      {caseFileUpload.phase === "uploading"
+                        ? caseFileUpload.chunkProgress
+                          ? t("cases.detail.uploadingChunks", {
+                              received: caseFileUpload.chunkProgress.receivedChunks,
+                              total: caseFileUpload.chunkProgress.totalChunks,
+                            })
+                          : t("cases.detail.uploading")
+                        : caseFileUpload.phase === "processing"
+                          ? t("cases.detail.processingFile")
+                          : t("cases.detail.saving")}
+                    </span>
+                  </div>
+                )}
                 <button
                   type="button"
                   disabled={attachmentBusy || !attachmentFile}
                   onClick={() => void submitAttachment()}
                   className="bg-primary text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-teal-700 disabled:opacity-50"
                 >
-                  {attachmentBusy ? t("cases.detail.saving") : t("cases.detail.registerAttachment")}
+                  {attachmentBusy ? t("cases.detail.uploading") : t("cases.detail.uploadAttachment")}
                 </button>
               </div>
             )}
@@ -1317,36 +1409,76 @@ export default function CaseDetailPage() {
               {attachmentsList.length === 0 ? (
                 <li className="p-md text-secondary text-sm">{t("cases.detail.noAttachmentsYet")}</li>
               ) : (
-                attachmentsList.map((att) => (
-                  <li key={att.id} className="p-md flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div>
-                      <p className="font-medium text-on-surface">{att.originalFilename ?? att.filename}</p>
-                      <p className="text-xs text-secondary">
-                        {formatBytes(att.fileSize)} · {att.mimeType}
-                        {att.uploader
-                          ? ` · ${`${att.uploader.firstName ?? ""} ${att.uploader.lastName ?? ""}`.trim() || t("cases.detail.uploaderFallback")}`
-                          : ""}
-                        {att.workflowStepId ? (
-                          <span className="block text-teal-800 mt-1">
-                            {t("cases.detail.workflowStep", {
-                              name: stepNameById.get(att.workflowStepId) ?? att.workflowStepId.slice(0, 8) + "…",
-                            })}
-                          </span>
+                attachmentsList.map((att) => {
+                  const fmsId = parseFmsFileId(att.filePath);
+                  const actionBusy = attachmentFileActionId === att.id;
+                  return (
+                    <li
+                      key={att.id}
+                      className="p-md flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                    >
+                      <div className="min-w-0">
+                        <p className="font-medium text-on-surface truncate">
+                          {att.originalFilename ?? att.filename}
+                        </p>
+                        <p className="text-xs text-secondary">
+                          {formatBytes(att.fileSize)} · {att.mimeType}
+                          {att.uploader
+                            ? ` · ${`${att.uploader.firstName ?? ""} ${att.uploader.lastName ?? ""}`.trim() || t("cases.detail.uploaderFallback")}`
+                            : ""}
+                          {att.workflowStepId ? (
+                            <span className="block text-teal-800 mt-1">
+                              {t("cases.detail.workflowStep", {
+                                name:
+                                  stepNameById.get(att.workflowStepId) ??
+                                  att.workflowStepId.slice(0, 8) + "…",
+                              })}
+                            </span>
+                          ) : null}
+                          {!fmsId ? (
+                            <span className="block text-slate-500 mt-1">
+                              {t("cases.detail.metadataOnlyAttachment")}
+                            </span>
+                          ) : null}
+                        </p>
+                        {att.description && (
+                          <p className="text-sm text-slate-600 mt-1">{att.description}</p>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 shrink-0 self-start sm:self-center">
+                        {fmsId ? (
+                          <>
+                            <button
+                              type="button"
+                              disabled={actionBusy}
+                              onClick={() => void handleViewAttachment(att)}
+                              className="text-sm font-semibold text-teal-800 border border-teal-200 px-3 py-1.5 rounded-lg hover:bg-teal-50 disabled:opacity-50"
+                            >
+                              {t("cases.detail.view")}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={actionBusy}
+                              onClick={() => void handleDownloadAttachment(att)}
+                              className="text-sm font-semibold text-slate-700 border border-slate-200 px-3 py-1.5 rounded-lg hover:bg-slate-50 disabled:opacity-50"
+                            >
+                              {t("cases.detail.download")}
+                            </button>
+                          </>
                         ) : null}
-                      </p>
-                      {att.description && <p className="text-sm text-slate-600 mt-1">{att.description}</p>}
-                    </div>
-                    {canUpload && (
-                      <button
-                        type="button"
-                        onClick={() => setRemoveAttachmentId(att.id)}
-                        className="text-sm font-semibold text-red-700 border border-red-200 px-3 py-1.5 rounded-lg hover:bg-red-50 shrink-0 self-start sm:self-center"
-                      >
-                        {t("cases.detail.remove")}
-                      </button>
-                    )}
-                  </li>
-                ))
+                        {canDeleteAttachment && (
+                          <button
+                            type="button"
+                            onClick={() => setRemoveAttachmentId(att.id)}
+                            className="text-sm font-semibold text-red-700 border border-red-200 px-3 py-1.5 rounded-lg hover:bg-red-50"
+                          >
+                            {t("cases.detail.remove")}
+                          </button>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })
               )}
             </ul>
           </div>

@@ -5,6 +5,10 @@ import { authBus } from "./authEvents";
 const ACCESS_KEY = "iacms.accessToken";
 const REFRESH_KEY = "iacms.refreshToken";
 
+/** Default fetch timeout. Auth/login can be slower when RBAC/Redis are cold. */
+const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+const AUTH_REQUEST_TIMEOUT_MS = 45_000;
+
 export function getApiBase(): string {
   const raw = import.meta.env.VITE_API_URL;
   if (typeof raw === "string" && raw.trim()) {
@@ -176,6 +180,27 @@ function isPublicAuthPath(path: string): boolean {
   );
 }
 
+function timeoutForPath(path: string): number {
+  if (
+    path.includes("/session/login") ||
+    path.includes("/auth/login") ||
+    path.includes("/auth/register") ||
+    path.includes("/tenants/register")
+  ) {
+    return AUTH_REQUEST_TIMEOUT_MS;
+  }
+  return DEFAULT_REQUEST_TIMEOUT_MS;
+}
+
+function isNetworkError(e: unknown): boolean {
+  return (
+    e instanceof TypeError &&
+    (/failed to fetch/i.test(e.message) ||
+      /networkerror/i.test(e.message) ||
+      /fetch failed/i.test(e.message))
+  );
+}
+
 /** Gateway fetch with session cookies + optional Bearer JWT. Handles refresh-on-401 globally. */
 export async function apiFetch(
   path: string,
@@ -199,36 +224,90 @@ export async function apiFetch(
     return h;
   };
 
-  let res = await fetch(url, {
-    credentials: "include",
-    ...init,
-    headers: buildHeaders(),
-  });
+  const controller = new AbortController();
+  let timedOut = false;
+  const timeoutMs = timeoutForPath(path);
+  const timeoutId = window.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
 
-  if (res.status === 401 && !isPublicAuthPath(path)) {
-    const refreshed = await refreshAccessToken();
-    if (refreshed) {
-      res = await fetch(url, {
-        credentials: "include",
-        ...init,
-        headers: buildHeaders(),
-      });
-    } else if (getStoredAccessToken() || getRefreshToken()) {
-      // Had a token, refresh failed → session is gone.
-      authBus.emit("expired");
+  const passthroughSignal = init.signal;
+  let callerAborted = false;
+  if (passthroughSignal) {
+    if (passthroughSignal.aborted) {
+      callerAborted = true;
+      controller.abort();
+    } else {
+      passthroughSignal.addEventListener(
+        "abort",
+        () => {
+          callerAborted = true;
+          controller.abort();
+        },
+        { once: true },
+      );
     }
   }
 
-  const data = await parseResponse(res);
+  try {
+    let res = await fetch(url, {
+      credentials: "include",
+      ...init,
+      headers: buildHeaders(),
+      signal: controller.signal,
+    });
 
-  if (res.status === 403 && !isPasswordChangeRequiredError(data)) {
-    authBus.emit("forbidden");
-  }
+    if (res.status === 401 && !isPublicAuthPath(path)) {
+      const refreshed = await refreshAccessToken();
+      if (refreshed) {
+        res = await fetch(url, {
+          credentials: "include",
+          ...init,
+          headers: buildHeaders(),
+          signal: controller.signal,
+        });
+      } else if (getStoredAccessToken() || getRefreshToken()) {
+        // Had a token, refresh failed → session is gone.
+        authBus.emit("expired");
+      }
+    }
 
-  if (!res.ok) {
-    throw new ApiError(res.status, extractErrorMessage(data), data);
+    const data = await parseResponse(res);
+
+    if (res.status === 403 && !isPasswordChangeRequiredError(data)) {
+      authBus.emit("forbidden");
+    }
+
+    if (!res.ok) {
+      throw new ApiError(res.status, extractErrorMessage(data), data);
+    }
+    return data;
+  } catch (e) {
+    if (callerAborted || passthroughSignal?.aborted) {
+      // Preserve abort semantics for unmount / navigation cancellations.
+      throw e instanceof DOMException
+        ? e
+        : new DOMException("Aborted", "AbortError");
+    }
+    if (timedOut || (e instanceof DOMException && e.name === "AbortError")) {
+      throw new ApiError(
+        408,
+        "The gateway request timed out. Please check that the backend is reachable (API gateway on port 3000).",
+        null,
+      );
+    }
+    if (isNetworkError(e)) {
+      throw new ApiError(
+        503,
+        "Cannot reach the API gateway. Start the backend (api-gateway on port 3000) and ensure the Vite proxy is running.",
+        null,
+      );
+    }
+    throw e;
+  } finally {
+    window.clearTimeout(timeoutId);
   }
-  return data;
 }
 
 /**

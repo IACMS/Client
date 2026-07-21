@@ -41,7 +41,12 @@ export type Permission =
   // Referrals
   | "referrals:read"
   | "referrals:create"
-  | "referrals:update";
+  | "referrals:update"
+  // File Management Service
+  | "file:read"
+  | "file:upload"
+  | "file:delete"
+  | "file:admin";
 
 /** Backend wildcard tokens accepted by `hasPermission` in the gateway. */
 export type PermissionWildcard = "*" | "admin:*" | `${string}:*`;
