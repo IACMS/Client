@@ -1427,7 +1427,8 @@ export default function CaseDetailPage() {
                             ? ` · ${`${att.uploader.firstName ?? ""} ${att.uploader.lastName ?? ""}`.trim() || t("cases.detail.uploaderFallback")}`
                             : ""}
                           {att.workflowStepId ? (
-                            <span className="block text-teal-800 mt-1">
+                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-teal-800 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded-md mt-1.5">
+                              <span className="material-symbols-outlined text-[14px]">insights</span>
                               {t("cases.detail.workflowStep", {
                                 name:
                                   stepNameById.get(att.workflowStepId) ??

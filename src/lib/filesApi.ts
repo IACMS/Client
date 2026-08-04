@@ -366,18 +366,41 @@ export async function downloadFile(
   }
 }
 
-/** Open an FMS file in a new tab (inline view). */
+/** Open an FMS file in a new tab (inline view). Pre-opens window synchronously to bypass pop-up blockers. */
 export async function openFileView(
   fileId: string,
   signal?: AbortSignal,
 ): Promise<void> {
-  const blob = await viewFileBlob(fileId, signal);
-  const objectUrl = URL.createObjectURL(blob);
-  const win = window.open(objectUrl, "_blank", "noopener,noreferrer");
-  if (!win) {
-    URL.revokeObjectURL(objectUrl);
-    throw new ApiError(0, "Pop-up blocked — allow pop-ups to view the file", null);
+  const popup = typeof window !== "undefined" ? window.open("about:blank", "_blank") : null;
+  if (popup) {
+    try {
+      popup.document.write("<html><head><title>Loading Document...</title></head><body style='font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f8fafc;color:#1e293b;'><div style='text-align:center;'><h2>Loading Document...</h2><p style='color:#64748b;'>Please wait while the file is retrieved securely.</p></div></body></html>");
+    } catch {
+      /* ignore write errors */
+    }
   }
-  // Revoke after the new tab has a chance to load
-  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+
+  try {
+    const blob = await viewFileBlob(fileId, signal);
+    const objectUrl = URL.createObjectURL(blob);
+
+    if (popup && !popup.closed) {
+      popup.location.href = objectUrl;
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+    } else {
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+    }
+  } catch (err) {
+    if (popup && !popup.closed) {
+      popup.close();
+    }
+    throw err;
+  }
 }
