@@ -23,6 +23,7 @@ export type AuditFilters = {
   entityType?: string;
   entityId?: string;
   userId?: string;
+  tenantId?: string;
   startDate?: string;
   endDate?: string;
   sortBy?: "createdAt" | "action" | "entityType" | "entityId";
@@ -58,6 +59,7 @@ export function buildAuditQueryParams(
   if (filters.entityType?.trim()) p.entityType = filters.entityType.trim();
   if (filters.entityId?.trim()) p.entityId = filters.entityId.trim();
   if (filters.userId?.trim()) p.userId = filters.userId.trim();
+  if (filters.tenantId?.trim()) p.tenantId = filters.tenantId.trim();
   if (filters.startDate) p.startDate = filters.startDate;
   if (filters.endDate) p.endDate = filters.endDate;
   if (filters.sortBy) p.sortBy = filters.sortBy;
@@ -68,6 +70,7 @@ export function buildAuditQueryParams(
     p.excludeActions = filters.excludeActions.trim();
   return p;
 }
+
 
 /** ISO date (YYYY-MM-DD) for date inputs. */
 export function isoDateOnly(d: Date): string {

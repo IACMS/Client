@@ -165,7 +165,7 @@ export default function LoginPage() {
                     to="/forgot-password"
                     className="text-sm text-primary-container font-semibold hover:underline shrink-0"
                   >
-                    {t("auth.forgotPassword")}
+                    {t("auth.forgotPassword.title")}
                   </Link>
                 </div>
                 <div className="relative">
