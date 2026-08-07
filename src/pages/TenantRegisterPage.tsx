@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { StubNavItem } from "@/components/StubNavItem";
 import { useSession } from "@/context/SessionContext";
-import { ApiError, apiPost, persistAuthTokensFromResponse } from "@/lib/api";
+import { ApiError, apiPost } from "@/lib/api";
 import { getPasswordHint, isPasswordValid } from "@/lib/passwordRules";
 
 const HERO_IMG =
@@ -13,7 +13,7 @@ const HERO_IMG =
 export default function TenantRegisterPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { refresh, user, status } = useSession();
+  const { user, status } = useSession();
 
   const [agreed, setAgreed] = useState(false);
   const [tenantName, setTenantName] = useState("");
@@ -36,7 +36,10 @@ export default function TenantRegisterPage() {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!agreed) return;
+    if (!agreed) {
+      setErrorMessage(t("auth.register.agreementRequired") || "You must agree to the data sharing agreement to continue.");
+      return;
+    }
     const em = email.trim().toLowerCase();
     const tc = tenantCode.trim().toUpperCase();
     const tn = tenantName.trim();
@@ -68,18 +71,13 @@ export default function TenantRegisterPage() {
       };
       if (un.length >= 3) body.username = un;
 
-      const reg = await apiPost("/api/v1/tenants/register", body);
-      persistAuthTokensFromResponse(reg);
+      await apiPost("/api/v1/tenants/self-register", body);
 
-      const raw = await apiPost("/api/v1/session/login", {
-        email: em,
-        password,
-        tenantCode: tc,
-      });
-      persistAuthTokensFromResponse(raw);
-      await refresh();
+      // Registration is put in a pending state and must be approved by Platform Admins.
+      // Do not attempt to log in since the user account is inactive.
+      
       setDone(true);
-      navigate("/dashboard", { replace: true });
+      // Removed automatic navigate to /dashboard
     } catch (err) {
       const message =
         err instanceof ApiError ? err.message : err instanceof Error ? err.message : t("auth.register.failed");
@@ -150,10 +148,12 @@ export default function TenantRegisterPage() {
                     )}
                     {done && (
                       <div className="p-md bg-teal-50 border border-teal-200 rounded-lg text-teal-800 text-sm">
-                        {t("auth.tenantRegister.success")}
+                        {t("auth.tenantRegister.pendingApproval") || "Registration submitted successfully. Your organization is pending review by platform administrators."}
                       </div>
                     )}
-                    <div className="space-y-sm">
+                    {!done && (
+                      <>
+                      <div className="space-y-sm">
                       <label className="font-label-caps text-on-surface-variant block uppercase tracking-wider" htmlFor="org">
                         {t("auth.tenantRegister.orgName")}
                       </label>
@@ -283,13 +283,15 @@ export default function TenantRegisterPage() {
                         .
                       </span>
                     </label>
+                    </>
+                    )}
                     <div className="pt-md border-t border-surface-variant">
                       <button
-                        disabled={!agreed || submitting || !isPasswordValid(password) || password !== confirmPassword}
+                        disabled={done || submitting}
                         className="w-full bg-primary-container text-white py-lg rounded-lg font-h3 hover:opacity-90 transition-all flex items-center justify-center gap-md disabled:opacity-50 disabled:pointer-events-none"
                         type="submit"
                       >
-                        {submitting ? t("auth.tenantRegister.creating") : t("auth.tenantRegister.create")}
+                        {submitting ? t("auth.tenantRegister.creating") : (done ? "Submitted" : t("auth.tenantRegister.create"))}
                         <span className="material-symbols-outlined">domain_add</span>
                       </button>
                     </div>

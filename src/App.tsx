@@ -3,6 +3,7 @@ import RequireAuth from "./components/RequireAuth";
 import RequireAdmin from "./components/RequireAdmin";
 import RequireRole from "./components/RequireRole";
 import ForbiddenBanner from "./components/ForbiddenBanner";
+import AnnouncementBanner from "./components/portal/AnnouncementBanner";
 import CasesLayout from "./layouts/CasesLayout";
 import DashboardLayout from "./layouts/DashboardLayout";
 import HomePage from "./pages/HomePage";
@@ -31,6 +32,12 @@ import ReportsPage from "./pages/ReportsPage";
 import ChatPage from "./pages/ChatPage";
 import TenantSettingsPage from "./pages/TenantSettingsPage";
 import DepartmentsPage from "./pages/DepartmentsPage";
+import PlatformUsersPage from "./pages/PlatformUsersPage";
+import PlatformRolesPage from "./pages/PlatformRolesPage";
+import PlatformSettingsPage from "./pages/PlatformSettingsPage";
+import PlatformAnnouncementsPage from "./pages/PlatformAnnouncementsPage";
+import PlatformSupportPage from "./pages/PlatformSupportPage";
+import PlatformResourcesPage from "./pages/PlatformResourcesPage";
 import { useSession } from "./context/SessionContext";
 import { useEffect } from "react";
 
@@ -63,6 +70,7 @@ export default function App() {
   return (
     <>
       <ForbiddenBanner />
+      <AnnouncementBanner />
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/login" element={<LoginPage />} />
@@ -91,6 +99,12 @@ export default function App() {
               element={<RequireRole permission="platform:manage_tenants" />}
             >
               <Route path="/api-health" element={<ApiDiagnosticsPage />} />
+              <Route path="/platform/users" element={<PlatformUsersPage />} />
+              <Route path="/platform/roles" element={<PlatformRolesPage />} />
+              <Route path="/platform/settings" element={<PlatformSettingsPage />} />
+              <Route path="/platform/announcements" element={<PlatformAnnouncementsPage />} />
+              <Route path="/platform/support" element={<PlatformSupportPage />} />
+              <Route path="/platform/resources" element={<PlatformResourcesPage />} />
             </Route>
 
             {/* Workflow list + graph: read shows the designer as view-only; mutations stay workflows:update. */}

@@ -11,6 +11,7 @@ type SidebarLinkItem = {
   icon: string;
   end?: boolean;
   orPlatformOperator?: boolean;
+  hideForPlatformOperator?: boolean;
   adminOnly?: boolean;
   permission?: Permission;
   anyOf?: Permission[];
@@ -35,6 +36,7 @@ function linkVisible(
     allOf: (...ps: Permission[]) => boolean;
   },
 ): boolean {
+  if (item.hideForPlatformOperator && check.isPlatformOperator) return false;
   if (item.adminOnly) return check.isAdmin;
   if (item.orPlatformOperator && check.isPlatformOperator) return true;
   if (item.allOf?.length) return check.allOf(...item.allOf);
@@ -72,6 +74,7 @@ const items: SidebarItem[] = [
     icon: "group",
     end: false,
     adminOnly: true,
+    hideForPlatformOperator: true,
   },
   {
     to: "/agencies",
@@ -85,6 +88,48 @@ const items: SidebarItem[] = [
     to: "/api-health",
     labelKey: "nav.api",
     icon: "lan",
+    end: false,
+    permission: "platform:manage_tenants",
+  },
+  {
+    to: "/platform/users",
+    labelKey: "nav.platformUsers",
+    icon: "manage_accounts",
+    end: false,
+    permission: "platform:manage_tenants",
+  },
+  {
+    to: "/platform/roles",
+    labelKey: "nav.platformRoles",
+    icon: "admin_panel_settings",
+    end: false,
+    permission: "platform:manage_tenants",
+  },
+  {
+    to: "/platform/settings",
+    labelKey: "nav.platformSettings",
+    icon: "tune",
+    end: false,
+    permission: "platform:manage_tenants",
+  },
+  {
+    to: "/platform/announcements",
+    labelKey: "nav.platformAnnouncements",
+    icon: "campaign",
+    end: false,
+    permission: "platform:manage_tenants",
+  },
+  {
+    to: "/platform/support",
+    labelKey: "nav.platformSupport",
+    icon: "support_agent",
+    end: false,
+    permission: "platform:manage_tenants",
+  },
+  {
+    to: "/platform/resources",
+    labelKey: "nav.platformResources",
+    icon: "storage",
     end: false,
     permission: "platform:manage_tenants",
   },

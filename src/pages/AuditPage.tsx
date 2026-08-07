@@ -171,6 +171,21 @@ export default function AuditPage() {
         <p className="font-body-md text-slate-600 mt-1">{t("audit.subtitle")}</p>
       </header>
 
+      {/* Stats strip */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        {[
+          { label: "Total Events", value: loadState === "ok" ? total : "…", color: "text-teal-900" },
+          { label: "Showing", value: loadState === "ok" ? logs.length : "…", color: "text-slate-700" },
+          { label: "Page", value: loadState === "ok" ? `${page + 1} / ${totalPages}` : "…", color: "text-slate-600" },
+          { label: "Per Page", value: PAGE_SIZE, color: "text-slate-500" },
+        ].map((s) => (
+          <div key={s.label} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest">{s.label}</p>
+            <p className={`text-2xl font-bold mt-1 ${s.color}`}>{s.value}</p>
+          </div>
+        ))}
+      </div>
+
       <div className="bg-white border border-outline-variant rounded-xl shadow-sm p-4 mb-4 space-y-4">
         <div className="flex flex-wrap gap-2 items-end">
           <div className="flex-1 min-w-[200px]">

@@ -4,9 +4,10 @@ import { useTranslation } from "react-i18next";
 import { useIsAdmin, useSession } from "@/context/SessionContext";
 import RequestPartnershipModal from "@/components/RequestPartnershipModal";
 import CreateAgencyModal from "@/components/CreateAgencyModal";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import Can from "@/permissions/Can";
 import { usePermissions } from "@/permissions/usePermissions";
-import { ApiError, apiGet, isAbortError } from "@/lib/api";
+import { ApiError, apiGet, apiPatch, apiPost, isAbortError } from "@/lib/api";
 import type { ApiCase } from "@/lib/casesApi";
 
 type CasesResponse = { cases?: ApiCase[] };
@@ -61,39 +62,135 @@ export default function AgenciesPage() {
   return <TenantAgenciesDirectory />;
 }
 
-/**
- * Platform operators: full tenant registry from GET /api/v1/tenants.
- * No case counts or operational case APIs — those require tenant-scoped case permissions.
- */
 function PlatformAgenciesDirectory() {
   const { t } = useTranslation();
   const { user } = useSession();
   const { can } = usePermissions();
   const canCreateTenant = can("platform:manage_tenants");
+  const canManage = can("platform:manage_tenants");
   const [tenants, setTenants] = useState<TenantApi[]>([]);
+  const [pendingTenants, setPendingTenants] = useState<(TenantApi & { adminUser?: { firstName: string; lastName: string; email: string } })[]>([]);
+  const [view, setView] = useState<"ACTIVE" | "PENDING">("ACTIVE");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingPending, setLoadingPending] = useState(true);
   const [createAgencyOpen, setCreateAgencyOpen] = useState(false);
   const [lastCreatedAgency, setLastCreatedAgency] = useState<{ code: string; name: string } | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<TenantApi | null>(null);
+  const [confirmDecline, setConfirmDecline] = useState<TenantApi | null>(null);
+  const [impersonating, setImpersonating] = useState<TenantApi | null>(null);
+  const [impersonatingId, setImpersonatingId] = useState<string | null>(null);
+
+  const fetchTenants = async (signal?: AbortSignal) => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const data = (await apiGet("/api/v1/tenants", { signal })) as { tenants?: TenantApi[] };
+      if (!signal?.aborted) setTenants(Array.isArray(data.tenants) ? data.tenants : []);
+    } catch (e) {
+      if (isAbortError(e) || signal?.aborted) return;
+      setLoadError(e instanceof ApiError ? e.message : t("agencies.loadFailedGeneric"));
+      setTenants([]);
+    } finally {
+      if (!signal?.aborted) setLoading(false);
+    }
+  };
+
+  const fetchPending = async (signal?: AbortSignal) => {
+    setLoadingPending(true);
+    try {
+      const data = (await apiGet("/api/v1/platform/agencies/pending", { signal })) as any;
+      if (!signal?.aborted) setPendingTenants(Array.isArray(data.pending) ? data.pending : []);
+    } catch (e) {
+      if (isAbortError(e) || signal?.aborted) return;
+    } finally {
+      if (!signal?.aborted) setLoadingPending(false);
+    }
+  };
 
   useEffect(() => {
     const ac = new AbortController();
-    (async () => {
-      setLoading(true);
-      setLoadError(null);
-      try {
-        const data = (await apiGet("/api/v1/tenants", { signal: ac.signal })) as { tenants?: TenantApi[] };
-        if (!ac.signal.aborted) setTenants(Array.isArray(data.tenants) ? data.tenants : []);
-      } catch (e) {
-        if (isAbortError(e) || ac.signal.aborted) return;
-        setLoadError(e instanceof ApiError ? e.message : t("agencies.loadFailedGeneric"));
-        setTenants([]);
-      } finally {
-        if (!ac.signal.aborted) setLoading(false);
-      }
-    })();
+    void fetchTenants(ac.signal);
+    void fetchPending(ac.signal);
     return () => ac.abort();
   }, [t]);
+
+  const handleToggleStatus = async (tenant: TenantApi) => {
+    if (togglingId) return;
+    setTogglingId(tenant.id);
+    try {
+      await apiPatch(`/api/v1/platform/tenants/${tenant.id}/status`, { isActive: !tenant.isActive });
+      void fetchTenants();
+    } catch (e) {
+      alert(e instanceof ApiError ? e.message : "Failed to update status");
+    } finally {
+      setTogglingId(null);
+    }
+  };
+
+  const handleDeleteConfirmed = async () => {
+    if (!confirmDelete) return;
+    try {
+      await apiPatch(`/api/v1/platform/tenants/${confirmDelete.id}/status`, { isActive: false });
+      setConfirmDelete(null);
+      void fetchTenants();
+    } catch (e) {
+      alert(e instanceof ApiError ? e.message : "Failed to deactivate tenant");
+      setConfirmDelete(null);
+    }
+  };
+
+  const handleApprove = async (tenantId: string) => {
+    if (approvingId) return;
+    setApprovingId(tenantId);
+    try {
+      await apiPost(`/api/v1/platform/agencies/${tenantId}/approve`, {});
+      void fetchTenants();
+      void fetchPending();
+    } catch (e) {
+      alert(e instanceof ApiError ? e.message : "Failed to approve agency");
+    } finally {
+      setApprovingId(null);
+    }
+  };
+
+  const handleDeclineConfirmed = async () => {
+    if (!confirmDecline) return;
+    try {
+      await apiPost(`/api/v1/platform/agencies/${confirmDecline.id}/decline`, {});
+      setConfirmDecline(null);
+      void fetchPending();
+    } catch (e) {
+      alert(e instanceof ApiError ? e.message : "Failed to decline agency");
+      setConfirmDecline(null);
+    }
+  };
+
+  const handleImpersonateConfirmed = async () => {
+    if (!impersonating) return;
+    setImpersonatingId(impersonating.id);
+    try {
+      const res = (await apiPost(`/api/v1/platform/impersonate/${impersonating.id}`, {})) as {
+        success: boolean;
+        data: { token: string; tenantCode: string; tenantName: string; targetEmail: string };
+      };
+      setImpersonating(null);
+      // Open a new tab with the impersonation token pre-loaded in session storage
+      const url = new URL(window.location.origin + "/dashboard");
+      const tab = window.open(url.toString(), "_blank");
+      if (tab) {
+        tab.sessionStorage?.setItem("impersonation_token", res.data.token);
+        tab.sessionStorage?.setItem("impersonation_tenant", res.data.tenantName);
+      }
+      alert(`Impersonation token generated for ${res.data.targetEmail}. Token expires in 15 minutes.\n\nToken:\n${res.data.token}\n\nCopy this token and use it in the Authorization header or login flow.`);
+    } catch (e) {
+      alert(e instanceof ApiError ? e.message : "Impersonation failed");
+    } finally {
+      setImpersonatingId(null);
+    }
+  };
 
   const activeCount = tenants.filter((tenant) => tenant.isActive !== false).length;
 
@@ -101,7 +198,9 @@ function PlatformAgenciesDirectory() {
     t("agencies.table.code"),
     t("agencies.table.name"),
     t("agencies.table.status"),
+    "Joined",
     t("agencies.table.profile"),
+    ...(canManage ? ["Actions"] : []),
   ];
 
   return (
@@ -112,17 +211,41 @@ function PlatformAgenciesDirectory() {
           onClose={() => setCreateAgencyOpen(false)}
           onCreated={({ code, name }) => {
             setLastCreatedAgency({ code, name });
-            void (async () => {
-              try {
-                const data = (await apiGet("/api/v1/tenants")) as { tenants?: TenantApi[] };
-                setTenants(Array.isArray(data.tenants) ? data.tenants : []);
-              } catch {
-                /* refresh best-effort */
-              }
-            })();
+            void fetchTenants();
           }}
         />
       )}
+
+      <ConfirmDialog
+        open={!!confirmDelete}
+        title={`Deactivate "${confirmDelete?.name}"?`}
+        message="This will suspend the agency and deactivate all its users. You can reactivate it later from this page."
+        confirmLabel="Deactivate"
+        variant="danger"
+        onConfirm={handleDeleteConfirmed}
+        onCancel={() => setConfirmDelete(null)}
+      />
+
+      <ConfirmDialog
+        open={!!impersonating}
+        title={`Impersonate "${impersonating?.name}"?`}
+        message={`You will receive a short-lived 15-minute JWT for the tenant admin of ${impersonating?.name ?? "this tenant"}. This action is permanently logged in the global audit trail.`}
+        confirmLabel="Proceed with Impersonation"
+        variant="danger"
+        onConfirm={() => void handleImpersonateConfirmed()}
+        onCancel={() => setImpersonating(null)}
+      />
+
+      <ConfirmDialog
+        open={!!confirmDecline}
+        title={`Decline and remove "${confirmDecline?.name}"?`}
+        message="This will permanently delete this registration request and all associated data."
+        confirmLabel="Decline & Delete"
+        variant="danger"
+        onConfirm={handleDeclineConfirmed}
+        onCancel={() => setConfirmDecline(null)}
+      />
+
       <div className="mb-8">
         <div className="flex items-center gap-2 text-slate-500 font-label-caps text-xs mb-2 flex-wrap">
           <span>{t("portal.breadcrumb.portal")}</span>
@@ -152,6 +275,21 @@ function PlatformAgenciesDirectory() {
         </div>
       </div>
 
+      <div className="flex gap-4 border-b border-outline-variant mb-6">
+        <button
+          className={`pb-2 font-semibold text-sm transition-colors ${view === "ACTIVE" ? "text-primary border-b-2 border-primary" : "text-slate-500 hover:text-slate-800"}`}
+          onClick={() => setView("ACTIVE")}
+        >
+          Active Agencies ({tenants.length})
+        </button>
+        <button
+          className={`pb-2 font-semibold text-sm transition-colors ${view === "PENDING" ? "text-primary border-b-2 border-primary" : "text-slate-500 hover:text-slate-800"}`}
+          onClick={() => setView("PENDING")}
+        >
+          Pending Approvals {pendingTenants.length > 0 && <span className="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded-full ml-1">{pendingTenants.length}</span>}
+        </button>
+      </div>
+
       {lastCreatedAgency && (
         <div className="mb-6 p-4 rounded-xl border border-teal-200 bg-teal-50 text-teal-900 text-sm flex flex-wrap items-center justify-between gap-3">
           <p>
@@ -178,7 +316,7 @@ function PlatformAgenciesDirectory() {
         <Stat
           label={t("agencies.stats.active")}
           value={loading ? "…" : String(activeCount)}
-          sub={t("agencies.stats.activeHint")}
+          sub={loading ? "" : `${tenants.length - activeCount} suspended`}
           valueClass="text-emerald-700"
         />
         <div className="bg-white p-lg border border-outline-variant rounded-xl flex flex-col gap-1">
@@ -201,13 +339,14 @@ function PlatformAgenciesDirectory() {
         </div>
 
         <div className="overflow-x-auto">
+          {view === "ACTIVE" ? (
           <table className="w-full text-left border-collapse min-w-[700px]">
             <thead className="bg-primary text-white">
               <tr>
                 {tableHeaders.map((h) => (
                   <th
                     key={h}
-                    className={`p-md font-label-caps tracking-widest text-xs ${h === t("agencies.table.profile") ? "text-right" : ""}`}
+                    className={`p-md font-label-caps tracking-widest text-xs ${h === t("agencies.table.profile") || h === "Actions" ? "text-right" : ""}`}
                   >
                     {h}
                   </th>
@@ -217,14 +356,14 @@ function PlatformAgenciesDirectory() {
             <tbody className="divide-y divide-slate-200">
               {loading && tenants.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="p-lg text-center text-slate-500">
+                  <td colSpan={tableHeaders.length} className="p-lg text-center text-slate-500">
                     <span className="material-symbols-outlined align-middle animate-spin">progress_activity</span>{" "}
                     {t("common.loading")}
                   </td>
                 </tr>
               ) : tenants.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="p-lg text-center text-slate-500">
+                  <td colSpan={tableHeaders.length} className="p-lg text-center text-slate-500">
                     {t("agencies.empty")}
                   </td>
                 </tr>
@@ -234,9 +373,16 @@ function PlatformAgenciesDirectory() {
                     <td className="p-md font-system-id font-bold text-teal-800">{tenant.code}</td>
                     <td className="p-md font-body-sm font-semibold text-slate-900">{tenant.name}</td>
                     <td className="p-md">
-                      <span className="px-2.5 py-0.5 rounded-full text-xs font-bold border bg-green-50 text-green-700 border-green-200">
+                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                        tenant.isActive === false
+                          ? "bg-amber-50 text-amber-700 border-amber-200"
+                          : "bg-green-50 text-green-700 border-green-200"
+                      }`}>
                         {tenant.isActive === false ? t("agencies.status.inactive") : t("agencies.status.active")}
                       </span>
+                    </td>
+                    <td className="p-md text-xs text-slate-500">
+                      {tenant.createdAt ? new Date(tenant.createdAt).toLocaleDateString() : "—"}
                     </td>
                     <td className="p-md text-right">
                       <Link
@@ -246,16 +392,123 @@ function PlatformAgenciesDirectory() {
                         {t("agencies.openProfile")}
                       </Link>
                     </td>
+                        {canManage && (
+                      <td className="p-md text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            disabled={togglingId === tenant.id}
+                            onClick={() => handleToggleStatus(tenant)}
+                            className={`text-xs font-semibold px-3 py-1 rounded transition-colors disabled:opacity-50 ${
+                              tenant.isActive === false
+                                ? "text-emerald-700 bg-emerald-50 hover:bg-emerald-100"
+                                : "text-amber-700 bg-amber-50 hover:bg-amber-100"
+                            }`}
+                          >
+                            {togglingId === tenant.id ? "…" : tenant.isActive === false ? "Activate" : "Suspend"}
+                          </button>
+                          {tenant.isActive !== false && (
+                            <button
+                              type="button"
+                              disabled={impersonatingId === tenant.id}
+                              onClick={() => setImpersonating(tenant)}
+                              className="text-xs font-semibold px-3 py-1 rounded text-violet-700 bg-violet-50 hover:bg-violet-100 transition-colors disabled:opacity-50"
+                              title="Log in as this tenant's admin (15-min token, logged)"
+                            >
+                              {impersonatingId === tenant.id ? "…" : "Impersonate"}
+                            </button>
+                          )}
+                          {tenant.isActive !== false && (
+                            <button
+                              type="button"
+                              onClick={() => setConfirmDelete(tenant)}
+                              className="text-xs font-semibold px-3 py-1 rounded text-red-700 bg-red-50 hover:bg-red-100 transition-colors"
+                            >
+                              Archive
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))
               )}
             </tbody>
           </table>
+          ) : (
+          <table className="w-full text-left border-collapse min-w-[700px]">
+            <thead className="bg-primary text-white">
+              <tr>
+                <th className="p-md font-label-caps tracking-widest text-xs">Code</th>
+                <th className="p-md font-label-caps tracking-widest text-xs">Name</th>
+                <th className="p-md font-label-caps tracking-widest text-xs">Requested By</th>
+                <th className="p-md font-label-caps tracking-widest text-xs">Requested At</th>
+                <th className="p-md font-label-caps tracking-widest text-xs text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200">
+              {loadingPending && pendingTenants.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="p-lg text-center text-slate-500">
+                    <span className="material-symbols-outlined align-middle animate-spin">progress_activity</span>{" "}
+                    Loading...
+                  </td>
+                </tr>
+              ) : pendingTenants.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="p-lg text-center text-slate-500">
+                    No pending registration requests.
+                  </td>
+                </tr>
+              ) : (
+                pendingTenants.map((pt) => (
+                  <tr key={pt.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="p-md font-system-id font-bold text-amber-700">{pt.code}</td>
+                    <td className="p-md font-body-sm font-semibold text-slate-900">{pt.name}</td>
+                    <td className="p-md font-body-sm text-slate-700">
+                      {pt.adminUser ? (
+                        <>
+                          {pt.adminUser.firstName} {pt.adminUser.lastName} <br />
+                          <span className="text-xs text-slate-500">{pt.adminUser.email}</span>
+                        </>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td className="p-md text-xs text-slate-500">
+                      {pt.createdAt ? new Date(pt.createdAt).toLocaleDateString() : "—"}
+                    </td>
+                    <td className="p-md text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void handleApprove(pt.id)}
+                          disabled={approvingId === pt.id}
+                          className="bg-teal-600 text-white px-3 py-1.5 rounded text-xs font-semibold hover:bg-teal-700 transition"
+                        >
+                          {approvingId === pt.id ? "Approving..." : "Approve"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDecline(pt)}
+                          className="border border-red-200 text-red-700 px-3 py-1.5 rounded text-xs font-semibold hover:bg-red-50 hover:border-red-300 transition"
+                        >
+                          Decline
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+          )}
         </div>
       </div>
     </div>
   );
 }
+
 
 function TenantAgenciesDirectory() {
   const { t } = useTranslation();
