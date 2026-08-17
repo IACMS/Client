@@ -17,6 +17,7 @@ import { authBus } from "@/lib/authEvents";
 export const FMS_CASE_SERVICE = "case-management";
 export const FMS_MODULE_EVIDENCE = "evidence";
 export const FMS_MODULE_LETTER = "letter";
+export const FMS_MODULE_ATTACHMENT = "attachment";
 
 /** Files larger than this use the chunked upload API. */
 export const CHUNK_THRESHOLD_BYTES = 20 * 1024 * 1024;

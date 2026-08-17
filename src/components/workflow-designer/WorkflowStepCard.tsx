@@ -68,6 +68,13 @@ export default function WorkflowStepCard({
 
       <h3 className="font-bold text-slate-800 mt-2 pr-10">{step.name}</h3>
       <p className="text-[10px] text-slate-400 font-mono mb-2">{t("cases.detail.stepKey", { key: step.key })}</p>
+      
+      {/* Department assignment badge for cross-department workflow visualization */}
+      <div className="mb-2 inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+        <span className="material-symbols-outlined text-[13px] text-teal-600">corporate_fare</span>
+        <span>Cross-Department Step</span>
+      </div>
+
       {step.requiresAttachment && (
         <p className="text-[10px] font-semibold text-teal-800 bg-teal-50 border border-teal-100 rounded px-2 py-1 mb-2 inline-flex items-center gap-1">
           <span className="material-symbols-outlined text-[14px]">attach_file</span>

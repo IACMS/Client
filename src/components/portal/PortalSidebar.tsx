@@ -77,6 +77,14 @@ const items: SidebarItem[] = [
     hideForPlatformOperator: true,
   },
   {
+    to: "/settings/roles",
+    labelKey: "nav.rolesAndPermissions",
+    icon: "shield_person",
+    end: false,
+    adminOnly: true,
+    hideForPlatformOperator: true,
+  },
+  {
     to: "/agencies",
     labelKey: "nav.agencies",
     icon: "account_balance",
@@ -139,6 +147,7 @@ const items: SidebarItem[] = [
     icon: "history",
     end: false,
     permission: "audit:read",
+    hideForPlatformOperator: true,
   },
   {
     to: "/chat",
@@ -167,6 +176,7 @@ const items: SidebarItem[] = [
     icon: "corporate_fare",
     end: false,
     adminOnly: true,
+    hideForPlatformOperator: true,
   },
   {
     to: "/settings/tenant",
@@ -174,6 +184,7 @@ const items: SidebarItem[] = [
     icon: "settings",
     end: false,
     adminOnly: true,
+    hideForPlatformOperator: true,
   },
 ];
 

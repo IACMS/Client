@@ -31,6 +31,7 @@ import TasksPage from "./pages/TasksPage";
 import ReportsPage from "./pages/ReportsPage";
 import ChatPage from "./pages/ChatPage";
 import TenantSettingsPage from "./pages/TenantSettingsPage";
+import TenantRolesPage from "./pages/TenantRolesPage";
 import DepartmentsPage from "./pages/DepartmentsPage";
 import PlatformUsersPage from "./pages/PlatformUsersPage";
 import PlatformRolesPage from "./pages/PlatformRolesPage";
@@ -123,6 +124,7 @@ export default function App() {
             {/* Admin-only routes: hidden from non-admins in the UI and blocked here. */}
             <Route element={<RequireAdmin />}>
               <Route path="/settings/tenant" element={<TenantSettingsPage />} />
+              <Route path="/settings/roles" element={<TenantRolesPage />} />
               <Route
                 path="/settings/departments"
                 element={<DepartmentsPage />}

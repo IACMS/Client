@@ -8,6 +8,7 @@ import CaseWorkflowGuidePanel, { type WorkflowGuideStep } from "@/components/Cas
 import ExecuteTransitionModal from "@/components/ExecuteTransitionModal";
 import TransitionLetterModal, { type TransitionLetterResult } from "@/components/TransitionLetterModal";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import WriteRichAttachmentModal from "@/components/WriteRichAttachmentModal";
 import FileStatusBadge from "@/components/files/FileStatusBadge";
 import ForbiddenView from "@/components/ForbiddenView";
 import { useSession } from "@/context/SessionContext";
@@ -163,6 +164,7 @@ export default function CaseDetailPage() {
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
   const [attachmentBusy, setAttachmentBusy] = useState(false);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [writeModalOpen, setWriteModalOpen] = useState(false);
   const [attachmentFileActionId, setAttachmentFileActionId] = useState<string | null>(null);
   const [removeAttachmentId, setRemoveAttachmentId] = useState<string | null>(null);
   const [removeAttachmentBusy, setRemoveAttachmentBusy] = useState(false);
@@ -1395,16 +1397,38 @@ export default function CaseDetailPage() {
                     </span>
                   </div>
                 )}
-                <button
-                  type="button"
-                  disabled={attachmentBusy || !attachmentFile}
-                  onClick={() => void submitAttachment()}
-                  className="bg-primary text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-teal-700 disabled:opacity-50"
-                >
-                  {attachmentBusy ? t("cases.detail.uploading") : t("cases.detail.uploadAttachment")}
-                </button>
+                <div className="flex flex-wrap gap-3 pt-2">
+                  <button
+                    type="button"
+                    disabled={attachmentBusy || !attachmentFile}
+                    onClick={() => void submitAttachment()}
+                    className="bg-primary text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-teal-700 disabled:opacity-50 inline-flex items-center gap-1.5"
+                  >
+                    <span className="material-symbols-outlined text-base">upload_file</span>
+                    {attachmentBusy ? t("cases.detail.uploading") : t("cases.detail.uploadAttachment")}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setWriteModalOpen(true)}
+                    className="bg-teal-50 border border-teal-200 text-teal-800 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-teal-100 transition-colors inline-flex items-center gap-1.5"
+                  >
+                    <span className="material-symbols-outlined text-base text-teal-700">edit_note</span>
+                    Write Document / Note (CKEditor)
+                  </button>
+                </div>
               </div>
             )}
+
+            <WriteRichAttachmentModal
+              open={writeModalOpen}
+              onClose={() => setWriteModalOpen(false)}
+              caseId={decodedId}
+              workflowStepId={caseState?.currentStep?.id}
+              onSaved={() => {
+                void loadCase();
+              }}
+            />
             <ul className="divide-y divide-outline-variant border border-outline-variant rounded-lg overflow-hidden bg-white shadow-sm">
               {attachmentsList.length === 0 ? (
                 <li className="p-md text-secondary text-sm">{t("cases.detail.noAttachmentsYet")}</li>
