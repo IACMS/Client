@@ -280,21 +280,51 @@ export default function PlatformDashboardPage() {
           <h1 className="font-h1 text-primary leading-none">{t("dashboard.platform.title")}</h1>
           <p className="text-slate-500 mt-1 text-sm">{t("dashboard.platform.intro", { name: greeting })}</p>
         </div>
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex gap-2 flex-wrap items-center">
           <Can permission="platform:manage_tenants">
             <Link
-              to="/platform/users"
-              className="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg text-xs font-semibold hover:bg-slate-50 transition-colors inline-flex items-center gap-2 shadow-sm"
+              to="/register-organization"
+              className="px-4 py-2.5 bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white rounded-xl text-xs font-bold transition-all duration-200 inline-flex items-center gap-2 shadow-md hover:shadow-lg hover:-translate-y-0.5"
             >
-              <span className="material-symbols-outlined text-base">manage_accounts</span>
-              Platform Users
+              <span className="material-symbols-outlined text-base">add_business</span>
+              Register New Agency
             </Link>
             <Link
               to="/agencies"
-              className="px-4 py-2 bg-teal-700 text-white rounded-lg text-xs font-semibold hover:bg-teal-800 transition-colors inline-flex items-center gap-2 shadow-sm"
+              className="px-3.5 py-2.5 bg-white border border-slate-200 text-slate-700 hover:text-teal-700 hover:border-teal-300 rounded-xl text-xs font-semibold transition-all inline-flex items-center gap-1.5 shadow-sm hover:bg-teal-50/50"
             >
-              <span className="material-symbols-outlined text-base">domain</span>
-              {t("dashboard.platform.agencyDirectory")}
+              <span className="material-symbols-outlined text-base text-slate-500">domain</span>
+              Agencies
+            </Link>
+            <Link
+              to="/platform/users"
+              className="px-3.5 py-2.5 bg-white border border-slate-200 text-slate-700 hover:text-teal-700 hover:border-teal-300 rounded-xl text-xs font-semibold transition-all inline-flex items-center gap-1.5 shadow-sm hover:bg-teal-50/50"
+            >
+              <span className="material-symbols-outlined text-base text-slate-500">manage_accounts</span>
+              Platform Users
+            </Link>
+            <Link
+              to="/platform/announcements"
+              className="px-3 py-2.5 bg-white border border-slate-200 text-slate-700 hover:text-teal-700 hover:border-teal-300 rounded-xl text-xs font-semibold transition-all inline-flex items-center gap-1.5 shadow-sm hover:bg-teal-50/50"
+              title="Post System Announcements"
+            >
+              <span className="material-symbols-outlined text-base text-slate-500">campaign</span>
+              Announcements
+            </Link>
+            <Link
+              to="/api-health"
+              className="px-3 py-2.5 bg-white border border-slate-200 text-slate-700 hover:text-teal-700 hover:border-teal-300 rounded-xl text-xs font-semibold transition-all inline-flex items-center gap-1.5 shadow-sm hover:bg-teal-50/50"
+              title="System Health & API Diagnostics"
+            >
+              <span className="material-symbols-outlined text-base text-slate-500">lan</span>
+              API Health
+            </Link>
+            <Link
+              to="/platform/settings"
+              className="p-2.5 bg-white border border-slate-200 text-slate-600 hover:text-teal-700 hover:border-teal-300 rounded-xl text-xs font-semibold transition-all inline-flex items-center shadow-sm hover:bg-teal-50/50"
+              title="Platform Settings"
+            >
+              <span className="material-symbols-outlined text-lg">tune</span>
             </Link>
           </Can>
         </div>
