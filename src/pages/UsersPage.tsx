@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { apiGet } from "@/lib/api";
+import { apiGet, apiPatch, apiDelete } from "@/lib/api";
 import CreateUserModal from "@/components/CreateUserModal";
 import EditUserModal from "@/components/EditUserModal";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import { usePermissions } from "@/permissions/usePermissions";
 
 type ApiUser = {
@@ -30,7 +31,10 @@ export default function UsersPage() {
   const { can } = usePermissions();
   const canInvite = can("users:create");
   const canEdit = can("users:update");
+  const canDelete = can("users:delete");
   const [editUserId, setEditUserId] = useState<string | null>(null);
+  const [deletingUser, setDeletingUser] = useState<ApiUser | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   const fetchUsers = async () => {
     setLoadState("loading");
@@ -46,6 +50,32 @@ export default function UsersPage() {
   useEffect(() => {
     fetchUsers();
   }, []);
+
+  const handleToggleActive = async (u: ApiUser) => {
+    if (togglingId) return;
+    setTogglingId(u.id);
+    try {
+      const endpoint = u.isActive ? `/api/v1/auth/users/${u.id}/deactivate` : `/api/v1/auth/users/${u.id}/reactivate`;
+      await apiPatch(endpoint, {});
+      void fetchUsers();
+    } catch (e: any) {
+      alert(e.message || "Failed to update user status");
+    } finally {
+      setTogglingId(null);
+    }
+  };
+
+  const handleDeleteConfirmed = async () => {
+    if (!deletingUser) return;
+    try {
+      await apiDelete(`/api/v1/auth/users/${deletingUser.id}`);
+      setDeletingUser(null);
+      void fetchUsers();
+    } catch (e: any) {
+      alert(e.message || "Failed to delete user");
+      setDeletingUser(null);
+    }
+  };
 
   return (
     <div className="p-gutter max-w-7xl mx-auto w-full pb-10">
@@ -105,7 +135,7 @@ export default function UsersPage() {
                   <th className="p-4 font-semibold">
                     {t("users.table.lastLogin")}
                   </th>
-                  {canEdit && (
+                  {(canEdit || canDelete) && (
                     <th className="p-4 font-semibold text-right">
                       {t("users.table.actions")}
                     </th>
@@ -156,14 +186,37 @@ export default function UsersPage() {
                         ? new Date(u.lastLogin).toLocaleDateString()
                         : t("users.lastLoginNever")}
                     </td>
-                    {canEdit && (
+                    {(canEdit || canDelete) && (
                       <td className="p-4 text-right">
-                        <button
-                          className="text-primary hover:text-primary text-sm font-semibold"
-                          onClick={() => setEditUserId(u.id)}
-                        >
-                          {t("users.edit")}
-                        </button>
+                        <div className="flex items-center justify-end gap-3">
+                          {canEdit && (
+                            <>
+                              <button
+                                className="text-primary hover:text-primary text-sm font-semibold"
+                                onClick={() => setEditUserId(u.id)}
+                              >
+                                {t("users.edit")}
+                              </button>
+                              <button
+                                disabled={togglingId === u.id}
+                                className={`text-sm font-semibold transition-colors disabled:opacity-50 ${
+                                  u.isActive ? "text-amber-600 hover:text-amber-700" : "text-emerald-600 hover:text-emerald-700"
+                                }`}
+                                onClick={() => void handleToggleActive(u)}
+                              >
+                                {togglingId === u.id ? "..." : u.isActive ? "Deactivate" : "Activate"}
+                              </button>
+                            </>
+                          )}
+                          {canDelete && (
+                            <button
+                              className="text-red-600 hover:text-red-700 text-sm font-semibold"
+                              onClick={() => setDeletingUser(u)}
+                            >
+                              Delete
+                            </button>
+                          )}
+                        </div>
                       </td>
                     )}
                   </tr>
@@ -178,6 +231,16 @@ export default function UsersPage() {
           )}
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!deletingUser}
+        title={`Delete User?`}
+        message={`Are you sure you want to delete ${deletingUser?.firstName} ${deletingUser?.lastName}? This action cannot be undone.`}
+        confirmLabel="Delete"
+        variant="danger"
+        onConfirm={() => void handleDeleteConfirmed()}
+        onCancel={() => setDeletingUser(null)}
+      />
 
       <EditUserModal
         userId={editUserId}

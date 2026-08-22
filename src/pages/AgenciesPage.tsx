@@ -80,8 +80,7 @@ function PlatformAgenciesDirectory() {
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<TenantApi | null>(null);
   const [confirmDecline, setConfirmDecline] = useState<TenantApi | null>(null);
-  const [impersonating, setImpersonating] = useState<TenantApi | null>(null);
-  const [impersonatingId, setImpersonatingId] = useState<string | null>(null);
+
 
   const fetchTenants = async (signal?: AbortSignal) => {
     setLoading(true);
@@ -168,29 +167,7 @@ function PlatformAgenciesDirectory() {
     }
   };
 
-  const handleImpersonateConfirmed = async () => {
-    if (!impersonating) return;
-    setImpersonatingId(impersonating.id);
-    try {
-      const res = (await apiPost(`/api/v1/platform/impersonate/${impersonating.id}`, {})) as {
-        success: boolean;
-        data: { token: string; tenantCode: string; tenantName: string; targetEmail: string };
-      };
-      setImpersonating(null);
-      // Open a new tab with the impersonation token pre-loaded in session storage
-      const url = new URL(window.location.origin + "/dashboard");
-      const tab = window.open(url.toString(), "_blank");
-      if (tab) {
-        tab.sessionStorage?.setItem("impersonation_token", res.data.token);
-        tab.sessionStorage?.setItem("impersonation_tenant", res.data.tenantName);
-      }
-      alert(`Impersonation token generated for ${res.data.targetEmail}. Token expires in 15 minutes.\n\nToken:\n${res.data.token}\n\nCopy this token and use it in the Authorization header or login flow.`);
-    } catch (e) {
-      alert(e instanceof ApiError ? e.message : "Impersonation failed");
-    } finally {
-      setImpersonatingId(null);
-    }
-  };
+
 
   const activeCount = tenants.filter((tenant) => tenant.isActive !== false).length;
 
@@ -226,15 +203,7 @@ function PlatformAgenciesDirectory() {
         onCancel={() => setConfirmDelete(null)}
       />
 
-      <ConfirmDialog
-        open={!!impersonating}
-        title={`Impersonate "${impersonating?.name}"?`}
-        message={`You will receive a short-lived 15-minute JWT for the tenant admin of ${impersonating?.name ?? "this tenant"}. This action is permanently logged in the global audit trail.`}
-        confirmLabel="Proceed with Impersonation"
-        variant="danger"
-        onConfirm={() => void handleImpersonateConfirmed()}
-        onCancel={() => setImpersonating(null)}
-      />
+
 
       <ConfirmDialog
         open={!!confirmDecline}
@@ -407,17 +376,7 @@ function PlatformAgenciesDirectory() {
                           >
                             {togglingId === tenant.id ? "…" : tenant.isActive === false ? "Activate" : "Suspend"}
                           </button>
-                          {tenant.isActive !== false && (
-                            <button
-                              type="button"
-                              disabled={impersonatingId === tenant.id}
-                              onClick={() => setImpersonating(tenant)}
-                              className="text-xs font-semibold px-3 py-1 rounded text-violet-700 bg-violet-50 hover:bg-violet-100 transition-colors disabled:opacity-50"
-                              title="Log in as this tenant's admin (15-min token, logged)"
-                            >
-                              {impersonatingId === tenant.id ? "…" : "Impersonate"}
-                            </button>
-                          )}
+
                           {tenant.isActive !== false && (
                             <button
                               type="button"

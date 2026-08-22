@@ -335,6 +335,7 @@ export default function CaseDetailPage() {
       description: `Transition letter: ${execModal?.actionName ?? "workflow action"}`,
       ...(caseState?.currentStep?.id ? { workflowStepId: caseState.currentStep.id } : {}),
     });
+    return fmsFile.id;
   };
 
   const executeTransitionPost = async (comment?: string) => {
@@ -368,12 +369,15 @@ export default function CaseDetailPage() {
       destinationStepName: execModal.targetStepName,
     };
     try {
-      await apiPost(`/api/v1/cases/${decodedId}/transitions/${execModal.transitionId}/execute`, {
-        comment: letter.plainText,
-      });
+      let commentPayload = letter.plainText;
       if (letter.attachToCase) {
         try {
-          await registerLetterAttachment(letter);
+          const fmsId = await registerLetterAttachment(letter);
+          commentPayload = JSON.stringify({
+            type: "letter",
+            filename: letter.filename,
+            fmsId: fmsId,
+          });
         } catch {
           setExecError(t("cases.detail.letterAttachFailed"));
           setExecModal(null);
@@ -382,6 +386,11 @@ export default function CaseDetailPage() {
           return;
         }
       }
+
+      await apiPost(`/api/v1/cases/${decodedId}/transitions/${execModal.transitionId}/execute`, {
+        comment: commentPayload,
+      });
+
       setExecModal(null);
       await loadCase();
       setPostTransitionSuccess(snapshot);
@@ -636,6 +645,43 @@ export default function CaseDetailPage() {
   const canRefer = can("referrals:create") && holdsCustody && !caseClosed && !incomingPendingReferral;
 
   const transitionRoleLabels = useCallback((ids?: string[]) => roleNamesForIds(rbacRoles, ids), [rbacRoles]);
+
+  const renderComment = (comment: string) => {
+    try {
+      const parsed = JSON.parse(comment);
+      if (parsed && parsed.type === "letter" && parsed.filename && parsed.fmsId) {
+        return (
+          <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 mb-2 flex items-center justify-between gap-3 shadow-sm">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="material-symbols-outlined text-teal-700 shrink-0">description</span>
+              <span className="font-semibold text-slate-800 truncate">{parsed.filename}</span>
+            </div>
+            <div className="flex gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => void openFileView(parsed.fmsId)}
+                className="text-xs font-semibold px-3 py-1.5 rounded bg-white border border-slate-200 hover:bg-slate-100 flex items-center gap-1.5 text-slate-700 transition-colors shadow-sm"
+              >
+                <span className="material-symbols-outlined text-[14px]">visibility</span>
+                Preview
+              </button>
+              <button
+                type="button"
+                onClick={() => void downloadFile(parsed.fmsId)}
+                className="text-xs font-semibold px-3 py-1.5 rounded bg-white border border-slate-200 hover:bg-slate-100 flex items-center gap-1.5 text-slate-700 transition-colors shadow-sm"
+              >
+                <span className="material-symbols-outlined text-[14px]">download</span>
+                Download
+              </button>
+            </div>
+          </div>
+        );
+      }
+    } catch (e) {
+      // Not JSON
+    }
+    return <p className="text-sm text-slate-600 bg-slate-50 p-2 rounded mb-2 italic">&quot;{comment}&quot;</p>;
+  };
 
   if (loadState === "loading") {
     return (
@@ -1184,9 +1230,7 @@ export default function CaseDetailPage() {
                               {item.toStep ? item.toStep.name : "—"}
                             </p>
                           )}
-                          {item.comment && (
-                            <p className="text-sm text-slate-600 bg-slate-50 p-2 rounded mb-2 italic">&quot;{item.comment}&quot;</p>
-                          )}
+                          {item.comment && renderComment(item.comment)}
                           <p className="text-xs text-slate-400">
                             {t("cases.detail.byActor", {
                               name: item.actor

@@ -170,11 +170,10 @@ export default function LoginPage() {
                 </div>
                 <div className="relative">
                   <input
-                    className={`w-full px-3.5 py-3 text-sm bg-white border rounded-lg focus:ring-2 transition-all placeholder:text-outline-variant ${
-                      authError
+                    className={`w-full px-3.5 py-3 text-sm bg-white border rounded-lg focus:ring-2 transition-all placeholder:text-outline-variant ${authError
                         ? "border-error focus:ring-error/20 focus:border-error"
                         : "border-outline focus:ring-primary-container/20 focus:border-primary-container"
-                    }`}
+                      }`}
                     id="password"
                     placeholder="••••••••"
                     type={showPassword ? "text" : "password"}
@@ -188,9 +187,8 @@ export default function LoginPage() {
                   <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
                     <button
                       type="button"
-                      className={`material-symbols-outlined text-md cursor-pointer bg-transparent border-0 p-0 ${
-                        authError ? "text-error" : "text-outline-variant"
-                      }`}
+                      className={`material-symbols-outlined text-md cursor-pointer bg-transparent border-0 p-0 ${authError ? "text-error" : "text-outline-variant"
+                        }`}
                       aria-label={showPassword ? t("auth.hidePassword") : t("auth.showPassword")}
                       onClick={() => setShowPassword((v) => !v)}
                     >

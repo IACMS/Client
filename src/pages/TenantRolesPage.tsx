@@ -152,12 +152,14 @@ export default function TenantRolesPage() {
     );
   };
 
-  // Group permissions by resource
-  const groupedPerms = permissions.reduce<Record<string, PermissionItem[]>>((acc, p) => {
-    acc[p.resource] = acc[p.resource] || [];
-    acc[p.resource].push(p);
-    return acc;
-  }, {});
+  // Group permissions by resource (excluding platform permissions which are reserved for system admins)
+  const groupedPerms = permissions
+    .filter((p) => p.resource !== "platform")
+    .reduce<Record<string, PermissionItem[]>>((acc, p) => {
+      acc[p.resource] = acc[p.resource] || [];
+      acc[p.resource].push(p);
+      return acc;
+    }, {});
 
   return (
     <div className="p-gutter max-w-7xl mx-auto w-full pb-12 space-y-8">

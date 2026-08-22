@@ -3,8 +3,6 @@ import { useTranslation } from "react-i18next";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { StubNavItem } from "@/components/StubNavItem";
 
-const PROFILE_IMG =
-  "https://lh3.googleusercontent.com/aida-public/AB6AXuD3a64hKMf3GCKX_IXV1C9mz_mg8HNupuA-oOKR7zH0t8sbdU7SFgymRrpA08olq-I9XKDvXhpxtryPdFYdGPuGgMw09JXx_I0ElMEC4znfBlabd69DzOwptbgynC1Pc0Xzzj57d5Xt_DsEzSIC9WrY5j16omnf_kYbAH0HJ5geopy13qIBOTPOWvJscS8-dSr166pzi9MkQZ8eM_SEUcQATKyNO7KpOMPPdHPeHINi-cigYo5oh3naWp70ofT9aTjiJEpk4YGHEEI";
 const DASHBOARD_IMG =
   "https://lh3.googleusercontent.com/aida-public/AB6AXuBklXQxj2IbmLfqjsWyWT25qTbU5O-b3erTUwYeR_9rf-iLtb3UW-axXNat4qNn9_UjAM6bVf9fnIpwsmWIsVSHvtM-bqclJyNE7puTKpxV9TDXDtkym7iNxmqFiSEfCxnXioAutbEY_RiPpLJI12b86u1PQLa--eD0Y5xrDjHD20CCOTRRywohaSt09pog0VHEbz48MORGj6rt8V_SJO8QdfP6elR_knJnfFqtqXjD4wXxY9RHgSuz9xy6Hu17wKXjszrETmLQYIs";
 const COLLAB_IMG =
@@ -18,74 +16,16 @@ export default function HomePage() {
   return (
     <>
       <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center w-full px-6 h-16 fixed top-0 z-50">
-        <div className="flex items-center gap-gutter">
-          <Link to="/" className="text-xl font-bold tracking-tight text-teal-900 dark:text-teal-50 font-h1">
-            IACMS
-          </Link>
-          <nav className="hidden md:flex gap-lg items-center">
-            <Link
-              to="/dashboard"
-              className="text-slate-600 dark:text-slate-400 hover:text-teal-700 dark:hover:text-teal-300 font-body-sm font-medium transition-colors"
-            >
-              {t("nav.dashboard")}
-            </Link>
-            <Link
-              to="/cases"
-              className="text-slate-600 dark:text-slate-400 hover:text-teal-700 dark:hover:text-teal-300 font-body-sm font-medium transition-colors"
-            >
-              {t("nav.cases")}
-            </Link>
-            <Link
-              to="/agencies"
-              className="text-slate-600 dark:text-slate-400 hover:text-teal-700 dark:hover:text-teal-300 font-body-sm font-medium transition-colors"
-            >
-              {t("nav.agencies")}
-            </Link>
-            <StubNavItem className="text-slate-600 dark:text-slate-400 font-body-sm font-medium">
-              {t("nav.reports")}
-            </StubNavItem>
-          </nav>
-        </div>
-        <div className="flex items-center gap-md">
-          <div className="relative hidden sm:block">
-            <input
-              className="bg-surface-container-low border border-outline-variant rounded-lg px-4 py-1.5 text-body-sm focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container"
-              placeholder={t("home.searchPlaceholder")}
-              type="text"
-            />
-          </div>
+        <Link to="/" className="text-xl font-bold tracking-tight text-teal-900 dark:text-teal-50 font-h1">
+          IACMS
+        </Link>
+        <div className="flex items-center gap-3">
           <LanguageSwitcher />
-          <button
-            type="button"
-            className="material-symbols-outlined text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 p-2 rounded-full"
-            aria-label={t("common.notifications")}
-          >
-            notifications
-          </button>
-          <Link
-            to="/register-organization"
-            className="hidden md:inline-flex text-body-sm font-medium text-slate-600 dark:text-slate-400 hover:text-teal-700 dark:hover:text-teal-300"
-          >
-            {t("nav.newOrganization")}
-          </Link>
           <Link
             to="/login"
-            className="hidden sm:inline-flex text-body-sm font-medium text-primary-container hover:underline"
+            className="text-sm font-semibold text-primary-container border border-primary-container/30 px-5 py-2 rounded-lg hover:bg-primary-container/5 transition-colors"
           >
             {t("nav.signIn")}
-          </Link>
-          <button
-            type="button"
-            className="material-symbols-outlined text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 p-2 rounded-full"
-            aria-label={t("common.help")}
-          >
-            help_outline
-          </button>
-          <Link
-            to="/login"
-            className="h-8 w-8 rounded-full bg-primary-container flex items-center justify-center text-white text-xs font-bold border border-outline overflow-hidden"
-          >
-            <img alt="" className="rounded-full object-cover h-full w-full" src={PROFILE_IMG} />
           </Link>
         </div>
       </header>
