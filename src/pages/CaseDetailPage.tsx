@@ -1458,7 +1458,7 @@ export default function CaseDetailPage() {
                     className="bg-teal-50 border border-teal-200 text-teal-800 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-teal-100 transition-colors inline-flex items-center gap-1.5"
                   >
                     <span className="material-symbols-outlined text-base text-teal-700">edit_note</span>
-                    Write Document / Note (CKEditor)
+                    {t("cases.detail.writeDocument", "Write Document")}
                   </button>
                 </div>
               </div>
