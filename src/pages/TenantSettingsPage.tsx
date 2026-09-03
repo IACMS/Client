@@ -355,6 +355,8 @@ export default function TenantSettingsPage() {
           </button>
         </div>
       </form>
+
+      {/* Partner API Keys section removed — accessible via sidebar "Partner API Keys" nav item */}
     </div>
   );
 }

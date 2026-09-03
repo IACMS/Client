@@ -87,6 +87,22 @@ const items: SidebarItem[] = [
     hideForPlatformOperator: true,
   },
   {
+    to: "/integrations/api-keys",
+    labelKey: "nav.partnerApiKeys",
+    icon: "key",
+    end: false,
+    adminOnly: true,
+    hideForPlatformOperator: true,
+  },
+  {
+    to: "/integrations/webhooks",
+    labelKey: "nav.webhooks",
+    icon: "webhook",
+    end: false,
+    adminOnly: true,
+    hideForPlatformOperator: true,
+  },
+  {
     to: "/agencies",
     labelKey: "nav.agencies",
     icon: "account_balance",

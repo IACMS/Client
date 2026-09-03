@@ -85,6 +85,8 @@
     "reports": "Reports",
     "settings": "Settings",
     "departments": "Departments",
+    "partnerApiKeys": "Partner API Keys",
+    "webhooks": "Webhooks",
     "signIn": "Sign in",
     "signOut": "Sign out",
     "newOrganization": "New organization",

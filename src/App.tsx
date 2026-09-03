@@ -33,6 +33,8 @@ import ChatPage from "./pages/ChatPage";
 import TenantSettingsPage from "./pages/TenantSettingsPage";
 import TenantRolesPage from "./pages/TenantRolesPage";
 import DepartmentsPage from "./pages/DepartmentsPage";
+import ApiKeysPage from "./pages/ApiKeysPage";
+import WebhooksPage from "./pages/WebhooksPage";
 import PlatformUsersPage from "./pages/PlatformUsersPage";
 import PlatformRolesPage from "./pages/PlatformRolesPage";
 import PlatformSettingsPage from "./pages/PlatformSettingsPage";
@@ -129,6 +131,13 @@ export default function App() {
                 path="/settings/departments"
                 element={<DepartmentsPage />}
               />
+              {/* Legacy redirect — keep old bookmarks working */}
+              <Route
+                path="/settings/api-keys"
+                element={<Navigate to="/integrations/api-keys" replace />}
+              />
+              <Route path="/integrations/api-keys" element={<ApiKeysPage />} />
+              <Route path="/integrations/webhooks" element={<WebhooksPage />} />
               <Route path="/users" element={<UsersPage />} />
             </Route>
           </Route>
