@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import UsersPage from '../UsersPage';
@@ -19,7 +19,7 @@ vi.mock('@/context/SessionContext', () => ({
 
 vi.mock('@/permissions/usePermissions', () => ({
   usePermissions: () => ({
-    can: (perm: string) => true,
+    can: (_perm: string) => true,
   }),
 }));
 

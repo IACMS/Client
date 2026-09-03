@@ -667,7 +667,7 @@ export default function CaseDetailPage() {
               </button>
               <button
                 type="button"
-                onClick={() => void downloadFile(parsed.fmsId)}
+                onClick={() => void downloadFile(parsed.fmsId, parsed.filename)}
                 className="text-xs font-semibold px-3 py-1.5 rounded bg-white border border-slate-200 hover:bg-slate-100 flex items-center gap-1.5 text-slate-700 transition-colors shadow-sm"
               >
                 <span className="material-symbols-outlined text-[14px]">download</span>

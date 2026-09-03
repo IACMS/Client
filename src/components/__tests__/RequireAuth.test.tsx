@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -20,7 +20,7 @@ describe('RequireAuth component', () => {
     vi.mocked(useSession).mockReturnValue({ user: null, status: 'loading', refetchSession: vi.fn() } as any);
 
     render(
-      <MemoryRouter defaultEntries={['/dashboard']}>
+      <MemoryRouter initialEntries={['/dashboard']}>
         <Routes>
           <Route path="/" element={<RequireAuth />}>
             <Route path="dashboard" element={<div>Dashboard Page</div>} />
