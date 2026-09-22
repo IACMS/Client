@@ -184,29 +184,6 @@ export const PDFReaderModal: React.FC<PDFReaderModalProps> = ({
       role="presentation"
       onClick={onClose}
     >
-      {/* Fullscreen float strip */}
-      {isFullscreen && (
-        <div className="fixed top-4 right-4 z-[300] flex items-center gap-2 bg-white border border-slate-200 rounded-xl shadow-lg p-1">
-          <button
-            type="button"
-            onClick={() => setIsFullscreen(false)}
-            className={toolBtnClass}
-            title="Exit fullscreen"
-          >
-            <span className="material-symbols-outlined text-[16px] text-primary">fullscreen_exit</span>
-            <span>Exit fullscreen</span>
-          </button>
-          <div className="w-px h-5 bg-slate-200" />
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-white bg-primary rounded-lg hover:opacity-90 transition-opacity"
-          >
-            <span className="material-symbols-outlined text-[16px]">close</span>
-            Close
-          </button>
-        </div>
-      )}
 
       {/* Modal shell — mirrors platform modal style */}
       <div
@@ -214,7 +191,7 @@ export const PDFReaderModal: React.FC<PDFReaderModalProps> = ({
         aria-labelledby="file-viewer-title"
         onClick={(e) => e.stopPropagation()}
         className={`relative bg-white border border-slate-200 shadow-xl flex flex-col overflow-hidden transition-all duration-200 ${
-          isFullscreen ? 'w-full h-full rounded-none' : 'rounded-xl max-w-5xl w-full max-h-[92vh]'
+          isFullscreen ? 'w-full h-full rounded-none' : 'rounded-xl max-w-6xl w-full h-[90vh]'
         }`}
       >
         {/* ── Header ────────────────────────────────────────────────── */}
@@ -313,20 +290,20 @@ export const PDFReaderModal: React.FC<PDFReaderModalProps> = ({
             {/* Fullscreen toggle */}
             <button
               type="button"
-              onClick={() => setIsFullscreen((p) => !p)}
-              className={iconBtnClass}
+              onClick={(e) => { e.stopPropagation(); setIsFullscreen((p) => !p); }}
+              className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-600 transition-colors"
               title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
             >
-              <span className="material-symbols-outlined text-[18px]">
+              <span className="material-symbols-outlined text-[22px]">
                 {isFullscreen ? 'fullscreen_exit' : 'fullscreen'}
               </span>
             </button>
 
-            {/* Close */}
+            {/* Close — single button, works in both modes */}
             <button
               type="button"
               onClick={onClose}
-              className="p-1 rounded-lg hover:bg-slate-100 shrink-0 transition-colors"
+              className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-600 transition-colors shrink-0"
               aria-label="Close"
             >
               <span className="material-symbols-outlined text-[22px]">close</span>
