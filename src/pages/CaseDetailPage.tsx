@@ -36,11 +36,12 @@ import {
   fmsFilePath,
   FMS_CASE_SERVICE,
   FMS_MODULE_LETTER,
-  openFileView,
   parseFmsFileId,
   uploadAndWaitAvailable,
+  viewFileBlob,
 } from "@/lib/filesApi";
 import { fetchRbacRoles, roleNamesForIds, type RbacRoleRow } from "@/lib/workflowRoles";
+import { PDFReaderModal } from "@/components/files/PDFReaderModal";
 
 type CaseDetailResponse = { case?: ApiCase };
 
@@ -165,6 +166,7 @@ export default function CaseDetailPage() {
   const [attachmentBusy, setAttachmentBusy] = useState(false);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [writeModalOpen, setWriteModalOpen] = useState(false);
+  const [viewerFile, setViewerFile] = useState<{ url: string; name: string; type: string; size?: number } | null>(null);
   const [attachmentFileActionId, setAttachmentFileActionId] = useState<string | null>(null);
   const [removeAttachmentId, setRemoveAttachmentId] = useState<string | null>(null);
   const [removeAttachmentBusy, setRemoveAttachmentBusy] = useState(false);
@@ -493,7 +495,14 @@ export default function CaseDetailPage() {
     setAttachmentFileActionId(att.id);
     setAttachmentError(null);
     try {
-      await openFileView(fileId);
+      const blob = await viewFileBlob(fileId);
+      const url = URL.createObjectURL(blob);
+      setViewerFile({
+        url,
+        name: att.originalFilename ?? att.filename,
+        type: att.mimeType.includes("pdf") ? "pdf" : att.mimeType.includes("image") ? "image" : "other",
+        size: att.fileSize,
+      });
     } catch (e) {
       setAttachmentError(e instanceof ApiError ? e.message : t("cases.detail.viewFailed"));
     } finally {
@@ -659,7 +668,19 @@ export default function CaseDetailPage() {
             <div className="flex gap-2 shrink-0">
               <button
                 type="button"
-                onClick={() => void openFileView(parsed.fmsId)}
+                onClick={async () => {
+                  try {
+                    const blob = await viewFileBlob(parsed.fmsId);
+                    const url = URL.createObjectURL(blob);
+                    setViewerFile({
+                      url,
+                      name: parsed.filename,
+                      type: parsed.filename.toLowerCase().endsWith(".pdf") ? "pdf" : "other",
+                    });
+                  } catch (e) {
+                    console.error("Failed to view letter", e);
+                  }
+                }}
                 className="text-xs font-semibold px-3 py-1.5 rounded bg-white border border-slate-200 hover:bg-slate-100 flex items-center gap-1.5 text-slate-700 transition-colors shadow-sm"
               >
                 <span className="material-symbols-outlined text-[14px]">visibility</span>
@@ -1553,6 +1574,20 @@ export default function CaseDetailPage() {
           </div>
         )}
       </div>
+
+      <PDFReaderModal
+        isOpen={viewerFile !== null}
+        onClose={() => {
+          if (viewerFile?.url) {
+            URL.revokeObjectURL(viewerFile.url);
+          }
+          setViewerFile(null);
+        }}
+        fileUrl={viewerFile?.url ?? ""}
+        title={viewerFile?.name ?? ""}
+        fileType={viewerFile?.type ?? "pdf"}
+        fileSizeMb={viewerFile?.size ? (viewerFile.size / (1024 * 1024)).toFixed(2) : undefined}
+      />
     </div>
   );
 }
