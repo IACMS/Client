@@ -1,27 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { loadPdfDocument, renderPdfPage } from '@/services/pdfService';
 import { resolveImageUrl, stripExtension, getFileTypeBadgeLabel } from '@/lib/fileUtils';
-const MaterialIcon = ({ name, className = "" }: { name: string, className?: string }) => (
-  <span className={`material-symbols-outlined ${className}`}>{name}</span>
-);
-
-const X = (p: any) => <MaterialIcon name="close" {...p} />;
-const Maximize2 = (p: any) => <MaterialIcon name="fullscreen" {...p} />;
-const Minimize2 = (p: any) => <MaterialIcon name="fullscreen_exit" {...p} />;
-const ChevronLeft = (p: any) => <MaterialIcon name="chevron_left" {...p} />;
-const ChevronRight = (p: any) => <MaterialIcon name="chevron_right" {...p} />;
-const ZoomIn = (p: any) => <MaterialIcon name="zoom_in" {...p} />;
-const ZoomOut = (p: any) => <MaterialIcon name="zoom_out" {...p} />;
-const RotateCw = (p: any) => <MaterialIcon name="rotate_right" {...p} />;
-const Download = (p: any) => <MaterialIcon name="download" {...p} />;
-const Printer = (p: any) => <MaterialIcon name="print" {...p} />;
-const ExternalLink = (p: any) => <MaterialIcon name="open_in_new" {...p} />;
-const BookOpen = (p: any) => <MaterialIcon name="menu_book" {...p} />;
-const FileText = (p: any) => <MaterialIcon name="description" {...p} />;
-const Sun = (p: any) => <MaterialIcon name="light_mode" {...p} />;
-const Moon = (p: any) => <MaterialIcon name="dark_mode" {...p} />;
-const Coffee = (p: any) => <MaterialIcon name="local_cafe" {...p} />;
-const Loader2 = ({ className = "" }: { className?: string }) => <span className={`material-symbols-outlined animate-spin ${className}`}>progress_activity</span>;
 
 interface PDFReaderModalProps {
   isOpen: boolean;
@@ -34,19 +13,19 @@ interface PDFReaderModalProps {
 }
 
 type ViewMode = 'single' | 'continuous' | 'native';
-type ReadingTheme = 'light' | 'dark' | 'sepia';
 
 export const PDFReaderModal: React.FC<PDFReaderModalProps> = ({
   isOpen,
   onClose,
   fileUrl,
-  title = 'Document Reader',
+  title = 'Document',
   description,
   fileType = 'pdf',
-  fileSizeMb
+  fileSizeMb,
 }) => {
   const resolvedUrl = resolveImageUrl(fileUrl) || fileUrl;
   const isPdf = fileType === 'pdf' || (fileUrl && fileUrl.toLowerCase().endsWith('.pdf'));
+  const isImage = fileType === 'image' || (!isPdf && /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(fileUrl));
 
   // Reader State
   const [pdfDoc, setPdfDoc] = useState<any | null>(null);
@@ -56,20 +35,31 @@ export const PDFReaderModal: React.FC<PDFReaderModalProps> = ({
   const [scale, setScale] = useState<number>(1.2);
   const [rotation, setRotation] = useState<number>(0);
   const [viewMode, setViewMode] = useState<ViewMode>('native');
-  const [readingTheme, setReadingTheme] = useState<ReadingTheme>('light');
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [isLoadingDoc, setIsLoadingDoc] = useState<boolean>(true);
   const [isRenderingPage, setIsRenderingPage] = useState<boolean>(false);
-  // Removed loadError state
 
   // Canvas refs
   const mainCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const continuousContainerRef = useRef<HTMLDivElement | null>(null);
 
-  // 1. Load PDF Document
+  // Reset state on open
+  useEffect(() => {
+    if (isOpen) {
+      setCurrentPage(1);
+      setPageInput('1');
+      setScale(1.2);
+      setRotation(0);
+      setViewMode('native');
+      setIsFullscreen(false);
+    }
+  }, [isOpen]);
+
+  // Load PDF Document
   useEffect(() => {
     if (!isOpen || !resolvedUrl || !isPdf) {
       setPdfDoc(null);
+      setIsLoadingDoc(false);
       return;
     }
 
@@ -88,22 +78,18 @@ export const PDFReaderModal: React.FC<PDFReaderModalProps> = ({
       })
       .catch((err) => {
         if (isMounted) {
-          console.warn('PDF.js loading failed, switching to native browser view mode:', err);
+          console.warn('PDF.js loading failed, using native iframe:', err);
           setIsLoadingDoc(false);
-          // Fallback to native mode if PDF.js fails
           setViewMode('native');
         }
       });
 
-    return () => {
-      isMounted = false;
-    };
+    return () => { isMounted = false; };
   }, [isOpen, resolvedUrl, isPdf]);
 
-  // 2. Render Current Page (Single Page Mode)
+  // Render single page
   const renderSinglePage = useCallback(async () => {
     if (!pdfDoc || !mainCanvasRef.current || viewMode !== 'single') return;
-
     try {
       setIsRenderingPage(true);
       const page = await pdfDoc.getPage(currentPage);
@@ -118,17 +104,14 @@ export const PDFReaderModal: React.FC<PDFReaderModalProps> = ({
   }, [pdfDoc, currentPage, scale, rotation, viewMode]);
 
   useEffect(() => {
-    if (viewMode === 'single') {
-      renderSinglePage();
-    }
+    if (viewMode === 'single') renderSinglePage();
   }, [renderSinglePage, viewMode]);
 
-  // 3. Render Continuous Pages (Continuous Mode)
+  // Render continuous pages
   useEffect(() => {
     if (viewMode !== 'continuous' || !pdfDoc || !continuousContainerRef.current) return;
-
     let isMounted = true;
-    const renderAllPages = async () => {
+    const renderAll = async () => {
       setIsRenderingPage(true);
       try {
         for (let i = 1; i <= numPages; i++) {
@@ -145,457 +128,278 @@ export const PDFReaderModal: React.FC<PDFReaderModalProps> = ({
         if (isMounted) setIsRenderingPage(false);
       }
     };
-
-    renderAllPages();
-    return () => {
-      isMounted = false;
-    };
+    renderAll();
+    return () => { isMounted = false; };
   }, [viewMode, pdfDoc, numPages, scale, rotation]);
 
-
-
-  // 5. Navigation & Zoom Handlers
+  // Navigation
   const handlePrevPage = () => {
-    if (currentPage > 1) {
-      const prev = currentPage - 1;
-      setCurrentPage(prev);
-      setPageInput(String(prev));
-    }
+    if (currentPage > 1) { const p = currentPage - 1; setCurrentPage(p); setPageInput(String(p)); }
   };
-
   const handleNextPage = () => {
-    if (currentPage < numPages) {
-      const next = currentPage + 1;
-      setCurrentPage(next);
-      setPageInput(String(next));
-    }
+    if (currentPage < numPages) { const p = currentPage + 1; setCurrentPage(p); setPageInput(String(p)); }
   };
-
   const handlePageInputSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const pageNum = parseInt(pageInput, 10);
-    if (!isNaN(pageNum) && pageNum >= 1 && pageNum <= numPages) {
-      setCurrentPage(pageNum);
-    } else {
-      setPageInput(String(currentPage));
-    }
+    const n = parseInt(pageInput, 10);
+    if (!isNaN(n) && n >= 1 && n <= numPages) setCurrentPage(n);
+    else setPageInput(String(currentPage));
   };
-
-  const handleZoomIn = () => {
-    setScale((prev) => Math.min(Number((prev + 0.2).toFixed(2)), 3.0));
-  };
-
-  const handleZoomOut = () => {
-    setScale((prev) => Math.max(Number((prev - 0.2).toFixed(2)), 0.5));
-  };
-
-  const handleZoomReset = () => {
-    setScale(1.2);
-  };
-
-  const handleFitWidth = () => {
-    setScale(1.6);
-  };
-
-  const handleRotate = () => {
-    setRotation((prev) => (prev + 90) % 360);
-  };
-
+  const handleZoomIn = () => setScale((p) => Math.min(Number((p + 0.2).toFixed(2)), 3.0));
+  const handleZoomOut = () => setScale((p) => Math.max(Number((p - 0.2).toFixed(2)), 0.5));
+  const handleZoomReset = () => setScale(1.2);
+  const handleRotate = () => setRotation((p) => (p + 90) % 360);
   const handlePrint = () => {
-    if (resolvedUrl) {
-      const printWindow = window.open(resolvedUrl, '_blank');
-      if (printWindow) {
-        printWindow.focus();
-      }
-    }
+    const pw = window.open(resolvedUrl, '_blank');
+    if (pw) pw.focus();
   };
 
-  // 6. Keyboard Shortcuts
+  // Keyboard shortcuts
   useEffect(() => {
     if (!isOpen) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      } else if (e.key === 'ArrowLeft') {
-        handlePrevPage();
-      } else if (e.key === 'ArrowRight') {
-        handleNextPage();
-      } else if (e.key === '+' || e.key === '=') {
-        handleZoomIn();
-      } else if (e.key === '-') {
-        handleZoomOut();
-      } else if (e.key === 'f' || e.key === 'F') {
-        setIsFullscreen((prev) => !prev);
-      }
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+      else if (e.key === 'ArrowLeft') handlePrevPage();
+      else if (e.key === 'ArrowRight') handleNextPage();
+      else if (e.key === '+' || e.key === '=') handleZoomIn();
+      else if (e.key === '-') handleZoomOut();
     };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
   }, [isOpen, currentPage, numPages, onClose]);
 
   if (!isOpen) return null;
 
-  // Theme styling helpers
-  const themeBgClasses = {
-    light: 'bg-slate-200/90 dark:bg-slate-950',
-    dark: 'bg-slate-950',
-    sepia: 'bg-[#f4ecd8] dark:bg-[#2b261f]'
-  }[readingTheme];
-
-  const canvasContainerBg = {
-    light: 'bg-slate-100 dark:bg-slate-900 shadow-2xl',
-    dark: 'bg-slate-900 border border-slate-800 shadow-2xl',
-    sepia: 'bg-[#fdfaf2] border border-[#e3d7bf] shadow-2xl'
-  }[readingTheme];
+  // Shared action button class matching the project style
+  const toolBtnClass =
+    'flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors';
+  const iconBtnClass =
+    'p-1.5 text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-30';
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md animate-in fade-in duration-200 ${
-        isFullscreen ? 'p-0' : 'p-2 sm:p-4 md:p-6'
+      className={`fixed inset-0 z-[200] flex items-center justify-center bg-black/40 ${
+        isFullscreen ? 'p-0' : 'p-4'
       }`}
+      role="presentation"
+      onClick={onClose}
     >
-      {/* Floating Quick-Exit Widget for Fullscreen View */}
+      {/* Fullscreen float strip */}
       {isFullscreen && (
-        <div className="fixed top-4 right-5 z-50 flex items-center gap-2 bg-slate-900/95 backdrop-blur-md p-1.5 rounded-2xl border border-slate-700 shadow-2xl animate-in fade-in slide-in-from-top-2 duration-200">
+        <div className="fixed top-4 right-4 z-[300] flex items-center gap-2 bg-white border border-slate-200 rounded-xl shadow-lg p-1">
           <button
             type="button"
             onClick={() => setIsFullscreen(false)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-200 hover:text-white hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
-            title="Exit Fullscreen Mode"
+            className={toolBtnClass}
+            title="Exit fullscreen"
           >
-            <Minimize2 className="w-3.5 h-3.5 text-indigo-400" />
-            <span>Exit Fullscreen</span>
+            <span className="material-symbols-outlined text-[16px] text-primary">fullscreen_exit</span>
+            <span>Exit fullscreen</span>
           </button>
-          <div className="h-4 w-px bg-slate-700" />
+          <div className="w-px h-5 bg-slate-200" />
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 rounded-xl transition-colors shadow-md cursor-pointer active:scale-95"
-            title="Exit Document Viewer (Esc)"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-white bg-primary rounded-lg hover:opacity-90 transition-opacity"
           >
-            <X className="w-3.5 h-3.5" />
-            <span>Exit</span>
+            <span className="material-symbols-outlined text-[16px]">close</span>
+            Close
           </button>
         </div>
       )}
 
+      {/* Modal shell — mirrors platform modal style */}
       <div
-        className={`relative w-full bg-white dark:bg-slate-900 shadow-2xl overflow-hidden flex flex-col border border-slate-200 dark:border-slate-800 transition-all duration-300 ${
-          isFullscreen ? 'h-full rounded-none' : 'max-w-7xl h-[95vh] rounded-3xl'
+        role="dialog"
+        aria-labelledby="file-viewer-title"
+        onClick={(e) => e.stopPropagation()}
+        className={`relative bg-white border border-slate-200 shadow-xl flex flex-col overflow-hidden transition-all duration-200 ${
+          isFullscreen ? 'w-full h-full rounded-none' : 'rounded-xl max-w-5xl w-full max-h-[92vh]'
         }`}
       >
-        {/* ========================================================================= */}
-        {/* TOP TOOLBAR                                                               */}
-        {/* ========================================================================= */}
-        <div className="flex items-center justify-between px-3 sm:px-5 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 gap-2 sm:gap-4 shrink-0">
-          {/* Document Title & Icon */}
-          <div className="min-w-0 flex items-center gap-3">
-            <div className="p-2.5 bg-gradient-to-br from-indigo-500 to-indigo-700 text-white rounded-xl shrink-0 shadow-md">
-              <BookOpen className="w-5 h-5" />
-            </div>
+        {/* ── Header ────────────────────────────────────────────────── */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 shrink-0 gap-3">
+          {/* Title */}
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="material-symbols-outlined text-primary text-[22px] shrink-0">
+              {isPdf ? 'picture_as_pdf' : isImage ? 'image' : 'description'}
+            </span>
             <div className="min-w-0">
-              <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white truncate">
+              <h2 id="file-viewer-title" className="font-h3 text-primary truncate">
                 {stripExtension(title)}
-              </h3>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate flex items-center gap-1.5">
-                <span className="font-bold text-indigo-600 dark:text-indigo-400 uppercase">
-                  {isPdf ? 'PDF' : getFileTypeBadgeLabel(fileType as any)}
+              </h2>
+              <p className="text-[11px] text-slate-500 flex items-center gap-1.5">
+                <span className="font-semibold uppercase">
+                  {isPdf ? 'PDF' : isImage ? 'Image' : getFileTypeBadgeLabel(fileType as any)}
                 </span>
                 {fileSizeMb && (
                   <span>
-                    • {typeof fileSizeMb === 'number' ? `${fileSizeMb} MB` : fileSizeMb.toString().includes('MB') ? fileSizeMb : `${fileSizeMb} MB`}
+                    · {typeof fileSizeMb === 'number' ? `${fileSizeMb} MB` : fileSizeMb.toString().includes('MB') ? fileSizeMb : `${fileSizeMb} MB`}
                   </span>
                 )}
-                {numPages > 0 && <span>• {numPages} Page{numPages === 1 ? '' : 's'}</span>}
+                {numPages > 0 && <span>· {numPages} page{numPages === 1 ? '' : 's'}</span>}
               </p>
             </div>
           </div>
 
-          {/* Reader Center Controls (Page Jump & Zoom) */}
+          {/* PDF canvas-mode controls (desktop) */}
           {isPdf && viewMode !== 'native' && (
-            <div className="hidden md:flex items-center gap-2 bg-white dark:bg-slate-800 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs">
-              {/* Page Navigation */}
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={handlePrevPage}
-                  disabled={currentPage <= 1}
-                  className="p-1.5 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:hover:bg-transparent rounded-lg transition-colors cursor-pointer"
-                  title="Previous Page (Left Arrow)"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
+            <div className="hidden md:flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg p-1">
+              {/* Page navigation */}
+              <button type="button" onClick={handlePrevPage} disabled={currentPage <= 1} className={iconBtnClass} title="Previous page">
+                <span className="material-symbols-outlined text-[18px]">chevron_left</span>
+              </button>
+              <form onSubmit={handlePageInputSubmit} className="flex items-center gap-1">
+                <input
+                  type="text"
+                  value={pageInput}
+                  onChange={(e) => setPageInput(e.target.value)}
+                  onBlur={() => setPageInput(String(currentPage))}
+                  className="w-9 text-center text-xs font-mono font-semibold py-1 bg-white border border-slate-200 rounded focus:outline-none focus:ring-1 ring-primary text-slate-800"
+                />
+                <span className="text-xs text-slate-400 font-mono">/ {numPages || 1}</span>
+              </form>
+              <button type="button" onClick={handleNextPage} disabled={currentPage >= numPages} className={iconBtnClass} title="Next page">
+                <span className="material-symbols-outlined text-[18px]">chevron_right</span>
+              </button>
 
-                <form onSubmit={handlePageInputSubmit} className="flex items-center">
-                  <input
-                    type="text"
-                    value={pageInput}
-                    onChange={(e) => setPageInput(e.target.value)}
-                    onBlur={() => setPageInput(String(currentPage))}
-                    className="w-10 text-center text-xs font-bold py-0.5 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-md text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-1 focus:ring-indigo-500 font-mono"
-                  />
-                  <span className="text-xs text-slate-400 dark:text-slate-500 ml-1 font-mono">
-                    / {numPages || 1}
-                  </span>
-                </form>
+              <div className="w-px h-5 bg-slate-200 mx-0.5" />
 
-                <button
-                  type="button"
-                  onClick={handleNextPage}
-                  disabled={currentPage >= numPages}
-                  className="p-1.5 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:hover:bg-transparent rounded-lg transition-colors cursor-pointer"
-                  title="Next Page (Right Arrow)"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className="h-4 w-px bg-slate-200 dark:bg-slate-700" />
-
-              {/* Zoom Controls */}
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={handleZoomOut}
-                  disabled={scale <= 0.5}
-                  className="p-1.5 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 rounded-lg transition-colors cursor-pointer"
-                  title="Zoom Out (-)"
-                >
-                  <ZoomOut className="w-4 h-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={handleZoomReset}
-                  className="px-2 py-1 text-[11px] font-mono font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors cursor-pointer"
-                  title="Reset Zoom to 100%"
-                >
-                  {Math.round(scale * 100)}%
-                </button>
-                <button
-                  type="button"
-                  onClick={handleZoomIn}
-                  disabled={scale >= 3.0}
-                  className="p-1.5 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 rounded-lg transition-colors cursor-pointer"
-                  title="Zoom In (+)"
-                >
-                  <ZoomIn className="w-4 h-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={handleFitWidth}
-                  className="px-2 py-1 text-[11px] font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors cursor-pointer"
-                  title="Fit to Width"
-                >
-                  Fit
-                </button>
-              </div>
-
-              <div className="h-4 w-px bg-slate-200 dark:bg-slate-700" />
-
-              {/* Rotate */}
+              {/* Zoom */}
+              <button type="button" onClick={handleZoomOut} disabled={scale <= 0.5} className={iconBtnClass} title="Zoom out (-)">
+                <span className="material-symbols-outlined text-[18px]">zoom_out</span>
+              </button>
               <button
                 type="button"
-                onClick={handleRotate}
-                className="p-1.5 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors cursor-pointer"
-                title="Rotate 90° Clockwise"
+                onClick={handleZoomReset}
+                className="px-2 py-1 text-[11px] font-mono font-semibold text-slate-700 hover:bg-slate-100 rounded transition-colors"
+                title="Reset zoom"
               >
-                <RotateCw className="w-4 h-4" />
+                {Math.round(scale * 100)}%
+              </button>
+              <button type="button" onClick={handleZoomIn} disabled={scale >= 3.0} className={iconBtnClass} title="Zoom in (+)">
+                <span className="material-symbols-outlined text-[18px]">zoom_in</span>
+              </button>
+
+              <div className="w-px h-5 bg-slate-200 mx-0.5" />
+
+              {/* Rotate */}
+              <button type="button" onClick={handleRotate} className={iconBtnClass} title="Rotate 90°">
+                <span className="material-symbols-outlined text-[18px]">rotate_right</span>
               </button>
             </div>
           )}
 
-          {/* Right Action Buttons */}
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            {/* Reading Theme Palette (Light, Dark, Sepia) */}
-            {isPdf && viewMode !== 'native' && (
-              <div className="hidden sm:flex items-center gap-1 p-1 bg-slate-200 dark:bg-slate-800 rounded-xl">
-                <button
-                  type="button"
-                  onClick={() => setReadingTheme('light')}
-                  className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                    readingTheme === 'light' ? 'bg-white text-amber-500 shadow-xs' : 'text-slate-500'
-                  }`}
-                  title="Light Theme"
-                >
-                  <Sun className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setReadingTheme('sepia')}
-                  className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                    readingTheme === 'sepia' ? 'bg-[#f4ecd8] text-[#8b5a2b] shadow-xs' : 'text-slate-500'
-                  }`}
-                  title="Eye-Care Sepia Theme"
-                >
-                  <Coffee className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setReadingTheme('dark')}
-                  className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                    readingTheme === 'dark' ? 'bg-slate-900 text-indigo-400 shadow-xs' : 'text-slate-500'
-                  }`}
-                  title="Night Mode"
-                >
-                  <Moon className="w-3.5 h-3.5" />
-                </button>
-              </div>
+          {/* Right-side actions */}
+          <div className="flex items-center gap-2 shrink-0">
+            {isPdf && (
+              <button type="button" onClick={handlePrint} className={`${toolBtnClass} hidden sm:flex`} title="Print">
+                <span className="material-symbols-outlined text-[16px]">print</span>
+                <span className="hidden md:inline">Print</span>
+              </button>
             )}
 
-            {/* Print */}
-            <button
-              type="button"
-              onClick={handlePrint}
-              className="px-2.5 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl border border-slate-200/60 dark:border-slate-700/60 transition-colors hidden sm:flex items-center gap-1.5 cursor-pointer shadow-2xs"
-              title="Print Document"
-            >
-              <Printer className="w-3.5 h-3.5 text-slate-500" />
-              <span className="hidden md:inline">Print</span>
-            </button>
-
-            {/* Open in Full New Tab */}
             <a
               href={resolvedUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl border border-slate-200/60 dark:border-slate-700/60 transition-colors shadow-2xs"
-              title="Open in New Browser Tab"
+              className={toolBtnClass}
+              title="Open in new tab"
             >
-              <span>Full Tab</span>
-              <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
+              <span className="material-symbols-outlined text-[16px]">open_in_new</span>
+              <span className="hidden md:inline">Full tab</span>
             </a>
 
-            {/* Fullscreen Toggle */}
+            {/* Fullscreen toggle */}
             <button
               type="button"
-              onClick={() => setIsFullscreen((prev) => !prev)}
-              className={`p-2 text-xs font-bold rounded-xl transition-colors cursor-pointer border ${
-                isFullscreen
-                  ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800'
-                  : 'text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border-slate-200/60 dark:border-slate-700/60'
-              }`}
-              title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen View'}
+              onClick={() => setIsFullscreen((p) => !p)}
+              className={iconBtnClass}
+              title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
             >
-              {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+              <span className="material-symbols-outlined text-[18px]">
+                {isFullscreen ? 'fullscreen_exit' : 'fullscreen'}
+              </span>
             </button>
 
-            {/* Exit / Close Button */}
+            {/* Close */}
             <button
               type="button"
               onClick={onClose}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 border border-rose-200/80 dark:border-rose-800/80 rounded-xl transition-all shadow-xs cursor-pointer active:scale-95 ml-1"
-              title="Exit Reader (Esc)"
+              className="p-1 rounded-lg hover:bg-slate-100 shrink-0 transition-colors"
+              aria-label="Close"
             >
-              <X className="w-4 h-4" />
-              <span>Exit</span>
+              <span className="material-symbols-outlined text-[22px]">close</span>
             </button>
           </div>
         </div>
 
-        {/* ========================================================================= */}
-        {/* MOBILE CONTROLS STRIP (Visible on small screens)                          */}
-        {/* ========================================================================= */}
+        {/* PDF canvas mobile controls strip */}
         {isPdf && viewMode !== 'native' && (
-          <div className="flex md:hidden items-center justify-between px-3 py-2 bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 shrink-0">
+          <div className="flex md:hidden items-center justify-between px-3 py-2 bg-slate-50 border-b border-slate-200 shrink-0">
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handlePrevPage}
-                disabled={currentPage <= 1}
-                className="p-1 text-slate-700 dark:text-slate-200 disabled:opacity-30"
-              >
-                <ChevronLeft className="w-5 h-5" />
+              <button type="button" onClick={handlePrevPage} disabled={currentPage <= 1} className="p-1 disabled:opacity-30">
+                <span className="material-symbols-outlined text-[20px]">chevron_left</span>
               </button>
-              <span className="text-xs font-bold font-mono">
-                {currentPage} / {numPages || 1}
-              </span>
-              <button
-                type="button"
-                onClick={handleNextPage}
-                disabled={currentPage >= numPages}
-                className="p-1 text-slate-700 dark:text-slate-200 disabled:opacity-30"
-              >
-                <ChevronRight className="w-5 h-5" />
+              <span className="text-xs font-mono font-semibold">{currentPage} / {numPages || 1}</span>
+              <button type="button" onClick={handleNextPage} disabled={currentPage >= numPages} className="p-1 disabled:opacity-30">
+                <span className="material-symbols-outlined text-[20px]">chevron_right</span>
               </button>
             </div>
-
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleZoomOut}
-                className="p-1 text-slate-700 dark:text-slate-200"
-              >
-                <ZoomOut className="w-4 h-4" />
+              <button type="button" onClick={handleZoomOut} className="p-1">
+                <span className="material-symbols-outlined text-[18px]">zoom_out</span>
               </button>
-              <span className="text-[11px] font-mono font-bold">
-                {Math.round(scale * 100)}%
-              </span>
-              <button
-                type="button"
-                onClick={handleZoomIn}
-                className="p-1 text-slate-700 dark:text-slate-200"
-              >
-                <ZoomIn className="w-4 h-4" />
+              <span className="text-[11px] font-mono font-semibold">{Math.round(scale * 100)}%</span>
+              <button type="button" onClick={handleZoomIn} className="p-1">
+                <span className="material-symbols-outlined text-[18px]">zoom_in</span>
+              </button>
+              <button type="button" onClick={handleRotate} className="p-1">
+                <span className="material-symbols-outlined text-[18px]">rotate_right</span>
               </button>
             </div>
           </div>
         )}
 
-        {/* ========================================================================= */}
-        {/* MAIN VIEWPORT AREA                                                        */}
-        {/* ========================================================================= */}
-        <div className={`flex-1 overflow-hidden relative flex ${themeBgClasses}`}>
-          {/* Center Document Canvas or Embed */}
-          <div className={`flex-1 overflow-auto flex items-center justify-center relative ${
-            isPdf && viewMode === 'native' ? 'p-0' : 'p-4 sm:p-8'
-          }`}>
-            {/* Loading Indicator */}
-            {(isLoadingDoc || isRenderingPage) && viewMode !== 'native' && (
-              <div className="absolute top-4 right-4 z-30 flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/75 backdrop-blur-md text-white text-xs font-semibold shadow-xl">
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400" />
-                <span>{isLoadingDoc ? 'Loading Document...' : 'Rendering Page...'}</span>
-              </div>
-            )}
+        {/* ── Main viewport ─────────────────────────────────────────── */}
+        <div className="flex-1 overflow-hidden relative bg-slate-100">
 
-            {/* 1. PDF Single Page Interactive Canvas View */}
+          {/* Loading overlay */}
+          {(isLoadingDoc || isRenderingPage) && isPdf && viewMode !== 'native' && (
+            <div className="absolute top-3 right-3 z-30 flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-slate-200 shadow text-xs font-semibold text-slate-700">
+              <span className="material-symbols-outlined text-[16px] text-primary animate-spin">progress_activity</span>
+              {isLoadingDoc ? 'Loading…' : 'Rendering…'}
+            </div>
+          )}
+
+          <div className={`flex-1 h-full overflow-auto flex items-center justify-center ${isPdf && viewMode === 'native' ? '' : 'p-6'}`}>
+
+            {/* 1. PDF single-page canvas */}
             {isPdf && viewMode === 'single' && (
-              <div className="max-w-full max-h-full flex items-center justify-center">
-                <div className={`p-1 sm:p-2 rounded-2xl transition-all duration-200 ${canvasContainerBg}`}>
-                  <canvas
-                    ref={mainCanvasRef}
-                    className="rounded-xl max-w-full h-auto block shadow-md"
-                  />
+              <div className="max-w-full flex items-start justify-center">
+                <div className="bg-white border border-slate-200 rounded-lg shadow-md overflow-hidden">
+                  <canvas ref={mainCanvasRef} className="max-w-full h-auto block" />
                 </div>
               </div>
             )}
 
-            {/* 2. PDF Continuous Scroll View */}
+            {/* 2. PDF continuous-scroll canvas */}
             {isPdf && viewMode === 'continuous' && (
-              <div
-                ref={continuousContainerRef}
-                className="w-full max-w-4xl space-y-8 flex flex-col items-center py-4"
-              >
+              <div ref={continuousContainerRef} className="w-full max-w-4xl space-y-6 flex flex-col items-center py-4">
                 {Array.from({ length: numPages }, (_, i) => i + 1).map((pageNum) => (
-                  <div
-                    key={pageNum}
-                    className={`p-1.5 sm:p-2 rounded-2xl transition-all duration-200 ${canvasContainerBg} flex flex-col items-center`}
-                  >
-                    <canvas
-                      id={`continuous-page-${pageNum}`}
-                      className="rounded-xl max-w-full h-auto block shadow-md"
-                    />
-                    <div className="w-full py-1 text-center text-[11px] font-mono font-bold text-slate-400">
+                  <div key={pageNum} className="bg-white border border-slate-200 rounded-lg shadow-md overflow-hidden flex flex-col items-center">
+                    <canvas id={`continuous-page-${pageNum}`} className="max-w-full h-auto block" />
+                    <p className="py-1.5 text-[11px] font-mono font-semibold text-slate-400">
                       Page {pageNum} of {numPages}
-                    </div>
+                    </p>
                   </div>
                 ))}
               </div>
             )}
 
-            {/* 3. PDF Native Browser Engine View (<embed> / <iframe>) */}
+            {/* 3. PDF native iframe */}
             {isPdf && viewMode === 'native' && (
-              <div className="w-full h-full overflow-hidden bg-white dark:bg-slate-900 flex flex-col">
+              <div className="w-full h-full">
                 <iframe
                   src={`${resolvedUrl}#toolbar=1&navpanes=1&zoom=100`}
                   className="w-full h-full border-0"
@@ -604,46 +408,46 @@ export const PDFReaderModal: React.FC<PDFReaderModalProps> = ({
               </div>
             )}
 
-            {/* 4. Non-PDF Images */}
-            {!isPdf && fileType === 'image' && (
-              <div className="max-w-full max-h-full flex items-center justify-center p-4">
+            {/* 4. Image file */}
+            {isImage && (
+              <div className="flex items-center justify-center p-4 h-full w-full">
                 <img
                   src={resolvedUrl}
                   alt={title}
-                  className="max-w-full max-h-[85vh] object-contain rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800"
+                  className="max-w-full max-h-full object-contain rounded-lg shadow-md border border-slate-200"
                 />
               </div>
             )}
 
-            {/* 5. Non-PDF Generic Documents */}
-            {!isPdf && fileType !== 'image' && (
-              <div className="text-center p-8 bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 max-w-md mx-auto space-y-4">
-                <div className="w-16 h-16 rounded-3xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mx-auto shadow-inner">
-                  <FileText className="w-8 h-8" />
+            {/* 5. Other file types */}
+            {!isPdf && !isImage && (
+              <div className="text-center p-8 bg-white border border-slate-200 rounded-xl shadow-sm max-w-sm mx-auto space-y-5">
+                <div className="w-16 h-16 rounded-xl bg-slate-100 flex items-center justify-center mx-auto">
+                  <span className="material-symbols-outlined text-[36px] text-primary">description</span>
                 </div>
                 <div>
-                  <h4 className="text-base font-bold text-slate-900 dark:text-white">{stripExtension(title)}</h4>
+                  <h4 className="font-semibold text-slate-800">{stripExtension(title)}</h4>
                   <p className="text-xs text-slate-500 mt-1">
-                    Download or open this document with your desktop viewer.
+                    This file type cannot be previewed in the browser.
                   </p>
                 </div>
-                <div className="flex items-center justify-center gap-3 pt-2">
+                <div className="flex items-center justify-center gap-3">
                   <a
                     href={resolvedUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 text-white text-xs font-bold shadow-md hover:bg-indigo-700"
+                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-primary rounded-lg hover:opacity-90 shadow-sm transition-opacity"
                   >
-                    <ExternalLink className="w-4 h-4" />
-                    <span>Open in Browser</span>
+                    <span className="material-symbols-outlined text-[18px]">open_in_new</span>
+                    Open
                   </a>
                   <a
                     href={resolvedUrl}
                     download
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 text-white text-xs font-bold shadow-md hover:bg-emerald-700"
+                    className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 shadow-sm transition-colors"
                   >
-                    <Download className="w-4 h-4" />
-                    <span>Download</span>
+                    <span className="material-symbols-outlined text-[18px]">download</span>
+                    Download
                   </a>
                 </div>
               </div>
@@ -651,13 +455,11 @@ export const PDFReaderModal: React.FC<PDFReaderModalProps> = ({
           </div>
         </div>
 
-        {/* ========================================================================= */}
-        {/* FOOTER SUMMARY                                                            */}
-        {/* ========================================================================= */}
+        {/* ── Footer (description) ───────────────────────────────────── */}
         {description && (
-          <div className="px-5 py-2.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 shrink-0 flex items-center justify-between">
-            <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-1">
-              <span className="font-bold text-slate-900 dark:text-white">Summary: </span>
+          <div className="px-4 py-2.5 border-t border-slate-100 bg-slate-50 shrink-0">
+            <p className="text-xs text-slate-600 line-clamp-1">
+              <span className="font-semibold text-slate-800">Note: </span>
               {description}
             </p>
           </div>
