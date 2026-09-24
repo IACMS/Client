@@ -42,6 +42,7 @@ import {
 } from "@/lib/filesApi";
 import { fetchRbacRoles, roleNamesForIds, type RbacRoleRow } from "@/lib/workflowRoles";
 import { PDFReaderModal } from "@/components/files/PDFReaderModal";
+import { detectFileType } from "@/lib/fileUtils";
 
 type CaseDetailResponse = { case?: ApiCase };
 
@@ -500,7 +501,7 @@ export default function CaseDetailPage() {
       setViewerFile({
         url,
         name: att.originalFilename ?? att.filename,
-        type: att.mimeType.includes("pdf") ? "pdf" : att.mimeType.includes("image") ? "image" : "other",
+        type: detectFileType(att.mimeType) !== 'other' ? detectFileType(att.mimeType) : detectFileType(att.originalFilename ?? att.filename),
         size: att.fileSize,
       });
     } catch (e) {
