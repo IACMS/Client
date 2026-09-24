@@ -212,17 +212,10 @@ export default function LoginPage() {
                 <span className="material-symbols-outlined">arrow_forward</span>
               </button>
             </form>
-            <div className="mt-6 sm:mt-7 pt-5 border-t border-surface-variant flex flex-col items-center gap-3 text-center">
-              <p className="text-sm text-on-surface-variant">{t("auth.noAccess")}</p>
-              <Link
-                to="/register"
-                className="text-base font-bold text-primary-container border-2 border-primary-container/20 px-8 py-2.5 rounded-full hover:bg-primary-container/5 transition-colors"
-              >
-                {t("auth.requestAccess")}
-              </Link>
-              <Link to="/register-organization" className="text-sm font-semibold text-primary hover:underline">
-                {t("auth.createOrganization")}
-              </Link>
+            <div className="mt-6 sm:mt-7 pt-5 border-t border-surface-variant text-center">
+              <p className="text-xs text-on-surface-variant leading-relaxed">
+                Official institutional system. Agency accounts and access credentials are pre-provisioned by system administrators.
+              </p>
             </div>
           </div>
           <footer className="text-center mt-8 sm:mt-10 w-full max-w-[460px] px-2 pb-4 sm:pb-6">

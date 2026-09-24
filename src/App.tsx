@@ -41,6 +41,10 @@ import PlatformSettingsPage from "./pages/PlatformSettingsPage";
 import PlatformAnnouncementsPage from "./pages/PlatformAnnouncementsPage";
 import PlatformSupportPage from "./pages/PlatformSupportPage";
 import PlatformResourcesPage from "./pages/PlatformResourcesPage";
+import DeveloperLayout from "./layouts/DeveloperLayout";
+import ApiReferencePage from "./pages/developers/ApiReferencePage";
+import GuidesPage from "./pages/developers/GuidesPage";
+import WebhooksDocPage from "./pages/developers/WebhooksDocPage";
 import { useSession } from "./context/SessionContext";
 import { useEffect } from "react";
 
@@ -82,6 +86,13 @@ export default function App() {
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/verify-email" element={<VerifyEmailPage />} />
+
+        {/* Developer Portal (Public API Docs) */}
+        <Route path="/developers" element={<DeveloperLayout />}>
+          <Route path="api" element={<ApiReferencePage />} />
+          <Route path="guides" element={<GuidesPage />} />
+          <Route path="webhooks" element={<WebhooksDocPage />} />
+        </Route>
 
         <Route element={<RequireAuth />}>
           <Route element={<DashboardLayout />}>
