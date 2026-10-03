@@ -22,6 +22,17 @@ export default defineConfig({
           });
         },
       },
+      "/ws": {
+        target: "ws://localhost:3000",
+        ws: true,
+        configure: (proxy) => {
+          proxy.on("error", (err: any) => {
+            // Silence harmless pipe breaks that occur when browser reconnects during HMR
+            if (err?.code === "EPIPE" || err?.code === "ECONNRESET") return;
+            console.error("[Vite WS proxy] error:", err.message);
+          });
+        },
+      },
     },
   },
   resolve: {

@@ -1,37 +1,178 @@
 export type ChatUser = {
   id: string;
-  email: string;
-  firstName: string;
-  lastName: string;
-  departmentId?: string | null;
-  department?: { id: string; code?: string; name?: string } | null;
-  isSelf?: boolean;
+  email?: string;
+  firstName?: string;
+  lastName?: string;
+  username?: string;
+};
+
+export type ChatParticipant = {
+  userId: string;
+  role: 'MEMBER' | 'ADMIN' | 'OWNER';
+  user?: ChatUser;
+};
+
+export type ChatConversation = {
+  id: string;
+  type: 'DIRECT' | 'GROUP';
+  title?: string | null;
+  lastMessageId?: string | null;
+  lastMessageAt?: string | null;
+  participants: ChatParticipant[];
+  unreadCount?: number;
 };
 
 export type ChatMessage = {
   id: string;
-  tenantId: string;
+  conversationId: string;
   senderId: string;
-  recipientId: string | null;
-  departmentId?: string | null;
-  recipientDepartmentId?: string | null;
-  body: string;
+  clientMessageId: string;
+  messageType: 'TEXT' | 'IMAGE' | 'FILE';
+  content: string;
   createdAt: string;
-  sender: ChatUser | null;
-  recipient: ChatUser | null;
+  sender?: ChatUser;
 };
-
-export type ChatChannel = "agency" | "department" | "dm";
 
 export function chatUserLabel(u: ChatUser | null | undefined): string {
   if (!u) return "Unknown";
   const name = `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim();
-  return name || u.email;
+  return name || u.email || u.username || "Unknown";
 }
 
 export function chatUserInitials(u: ChatUser | null | undefined): string {
   const label = chatUserLabel(u);
+  if (label === "Unknown") return "?";
   const parts = label.split(/\s+/).filter(Boolean);
   if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
   return label.slice(0, 2).toUpperCase();
+}
+
+/**
+ * WebSocket client for chat events with heartbeat (pong), auto-reconnect, and outgoing message queueing.
+ */
+export class ChatWebSocketClient {
+  private ws: WebSocket | null = null;
+  private messageHandlers: Set<(msg: any) => void> = new Set();
+  private subscribedConversations: Set<string> = new Set();
+  private sendQueue: any[] = [];
+  private manuallyDisconnected = false;
+  private reconnectTimer: any = null;
+  private reconnectAttempts = 0;
+  private url = "";
+
+  constructor(private token: string) {}
+
+  connect(url: string = "") {
+    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
+      return;
+    }
+
+    this.manuallyDisconnected = false;
+
+    if (!url) {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      url = `${protocol}//${window.location.host}/ws`;
+    }
+    this.url = url;
+
+    try {
+      this.ws = new WebSocket(`${url}?token=${this.token}`);
+
+      this.ws.onopen = () => {
+        this.reconnectAttempts = 0;
+        // 1. Flush queued messages
+        while (this.sendQueue.length > 0) {
+          const queued = this.sendQueue.shift();
+          this.ws?.send(JSON.stringify(queued));
+        }
+        // 2. Re-subscribe to any active conversations
+        this.subscribedConversations.forEach(conversationId => {
+          this.ws?.send(JSON.stringify({ action: "subscribe", conversationId }));
+        });
+      };
+
+      this.ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          // Auto-respond to heartbeat pings from server
+          if (data.type === 'ping') {
+            this.send({ action: "pong" });
+            return;
+          }
+          this.messageHandlers.forEach(h => h(data));
+        } catch (e) {
+          console.error("[ChatWS] Failed to parse WS message", e);
+        }
+      };
+
+      this.ws.onclose = () => {
+        this.ws = null;
+        if (!this.manuallyDisconnected) {
+          this.scheduleReconnect();
+        }
+      };
+
+      this.ws.onerror = (err) => {
+        console.warn("[ChatWS] WebSocket error:", err);
+      };
+    } catch (e) {
+      console.error("[ChatWS] Connection error:", e);
+      this.scheduleReconnect();
+    }
+  }
+
+  private scheduleReconnect() {
+    if (this.reconnectTimer || this.manuallyDisconnected) return;
+    const delay = Math.min(1000 * Math.pow(1.5, this.reconnectAttempts), 10000);
+    this.reconnectAttempts++;
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      if (!this.manuallyDisconnected) {
+        this.connect(this.url);
+      }
+    }, delay);
+  }
+
+  subscribeToConversation(conversationId: string) {
+    this.subscribedConversations.add(conversationId);
+    this.send({ action: "subscribe", conversationId });
+  }
+
+  unsubscribeFromConversation(conversationId: string) {
+    this.subscribedConversations.delete(conversationId);
+    this.send({ action: "unsubscribe", conversationId });
+  }
+
+  sendTyping(conversationId: string, isTyping: boolean) {
+    this.send({ action: "typing", conversationId, isTyping });
+  }
+
+  sendFocus(conversationId: string | null) {
+    this.send({ action: "focus", conversationId });
+  }
+
+  onMessage(handler: (msg: any) => void) {
+    this.messageHandlers.add(handler);
+    return () => this.messageHandlers.delete(handler);
+  }
+
+  private send(msg: any) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(msg));
+    } else {
+      this.sendQueue.push(msg);
+    }
+  }
+
+  disconnect() {
+    this.manuallyDisconnected = true;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.sendQueue = [];
+    this.subscribedConversations.clear();
+    this.ws?.close();
+    this.ws = null;
+  }
 }
