@@ -48,6 +48,10 @@ export default function ChatPage() {
 
   useEffect(() => {
     activeConversationIdRef.current = activeConversationId;
+    (window as any).__iacmsActiveConversationId = activeConversationId;
+    return () => {
+      (window as any).__iacmsActiveConversationId = null;
+    };
   }, [activeConversationId]);
 
   const loadConversations = useCallback(async () => {

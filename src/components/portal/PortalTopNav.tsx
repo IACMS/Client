@@ -6,6 +6,7 @@ import { useIsAdmin, useSession } from "@/context/SessionContext";
 import { usePermissions } from "@/permissions/usePermissions";
 import { getApiBase } from "@/lib/api";
 import { useSidebar } from "@/context/SidebarContext";
+import NotificationDropdown from "./NotificationDropdown";
 
 const AVATAR =
   "https://lh3.googleusercontent.com/aida-public/AB6AXuBV2ib7TtT1k_BFCUY7xGZUcQhPs164AcQhoSf4bkAr0t04NGWeFF0ZKlPZHHJzCIh7lHdArZ6crH3XCvwlLBouCesn_YhWxeuiZfIP1eq2MWxstjtPlkUaniU5PcPixY6iGeNjZceCvmvmyh13Ph-CcZfBjl9XC0EKt6yCI9_A_D9CjDAd8sfyD0Uc2t4yYeIeqJNO5d1S_B2yK3NyHrUPDkzAdsYzkpDUJUJzws5r94W6DZQTYI90HKcHlIo72ipQpO6nOKYU3Vk";
@@ -119,13 +120,10 @@ export default function PortalTopNav() {
       </div>
       <div className="flex items-center gap-1 sm:gap-2 md:gap-4 shrink-0">
         <LanguageSwitcher className="hidden sm:block" />
-        <button
-          type="button"
-          className="text-slate-600 dark:text-slate-400 hover:bg-slate-50 p-2 rounded-full cursor-pointer transition-colors"
-          aria-label={t("common.notifications")}
-        >
-          <span className="material-symbols-outlined">notifications</span>
-        </button>
+
+        {/* ── Notification Dropdown with live badge & push management ── */}
+        <NotificationDropdown />
+
         <div className="h-8 w-px bg-slate-200 mx-2 hidden sm:block" aria-hidden />
         <button
           type="button"
