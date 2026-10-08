@@ -13,7 +13,7 @@ export default defineConfig({
       // Forward all /api requests to the gateway — eliminates CORS entirely in dev.
       // The browser sees requests as same-origin (Vite server), Vite forwards them.
       "/api": {
-        target: "http://localhost:3000",
+        target: "http://127.0.0.1:3000",
         changeOrigin: true,
         secure: false,
         configure: (proxy) => {
@@ -23,8 +23,9 @@ export default defineConfig({
         },
       },
       "/ws": {
-        target: "ws://localhost:3000",
+        target: "ws://127.0.0.1:3000",
         ws: true,
+        changeOrigin: true,
         configure: (proxy) => {
           proxy.on("error", (err: any) => {
             // Silence harmless pipe breaks that occur when browser reconnects during HMR

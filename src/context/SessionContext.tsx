@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { apiGet, apiPost, clearStoredTokens } from "@/lib/api";
+import { apiGet, apiPost, clearStoredTokens, persistAuthTokensFromResponse } from "@/lib/api";
 import { authBus } from "@/lib/authEvents";
 
 export type SessionTenant = {
@@ -87,6 +87,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       "/api/v1/session/status",
     )) as SessionStatusPayload;
     if (data.authenticated && data.user) {
+      persistAuthTokensFromResponse(data);
       const nextUser: SessionUser = {
         ...data.user,
         mustChangePassword: Boolean(data.user?.mustChangePassword),

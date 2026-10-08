@@ -61,6 +61,133 @@ function Stat({
   );
 }
 
+function CasesTable({
+  cases,
+  tenantId,
+  emptyMessage,
+  t,
+}: {
+  cases: ApiCase[];
+  tenantId?: string;
+  emptyMessage: string;
+  t: (key: string, opts?: any) => string;
+}) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-left border-collapse min-w-[980px]">
+        <thead className="bg-primary text-white">
+          <tr>
+            {[
+              t("cases.table.caseNumber"),
+              t("cases.table.subject"),
+              t("cases.table.agency"),
+              "Department",
+              t("cases.table.status"),
+              t("cases.table.priority"),
+              t("cases.table.lastUpdated"),
+              t("cases.table.actions"),
+            ].map((h) => (
+              <th
+                key={h}
+                className={`p-md font-label-caps tracking-widest text-xs ${h === t("cases.table.actions") ? "text-right" : ""}`}
+              >
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-200">
+          {cases.length === 0 ? (
+            <tr>
+              <td
+                colSpan={8}
+                className="p-lg text-center text-slate-500 font-body-sm"
+              >
+                {emptyMessage}
+              </td>
+            </tr>
+          ) : (
+            cases.map((r, i) => {
+              const stClass = statusBadgeClass(r.status);
+              const pr = priorityDisplay(r.priority);
+              const incomingReferral = isIncomingPendingReferral(
+                r,
+                tenantId ?? undefined,
+              );
+              return (
+                <tr
+                  key={r.id}
+                  className={`${i % 2 === 1 ? "bg-surface-container-low " : ""}hover:bg-slate-50 transition-colors`}
+                >
+                  <td className="p-md font-system-id text-slate-600">
+                    {r.caseNumber}
+                    {incomingReferral && (
+                      <span className="block mt-1 text-[10px] font-bold uppercase text-teal-800 bg-teal-50 border border-teal-200 rounded px-1.5 py-0.5 w-fit">
+                        {t("cases.incomingReferralBadge")}
+                      </span>
+                    )}
+                  </td>
+                  <td className="p-md font-body-sm font-semibold text-slate-900">
+                    {r.title}
+                  </td>
+                  <td className="p-md font-body-sm text-slate-700">
+                    {r.tenant?.name ?? "—"}
+                  </td>
+                  <td className="p-md text-xs text-slate-600">
+                    {(
+                      r as unknown as {
+                        currentDepartment?: {
+                          name?: string;
+                          code?: string;
+                        };
+                      }
+                    ).currentDepartment?.name ??
+                      (
+                        r as unknown as {
+                          currentDepartment?: {
+                            name?: string;
+                            code?: string;
+                          };
+                        }
+                      ).currentDepartment?.code ??
+                      "—"}
+                  </td>
+                  <td className="p-md">
+                    <span
+                      className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${stClass}`}
+                    >
+                      {r.status.toUpperCase()}
+                    </span>
+                  </td>
+                  <td className="p-md">
+                    <span
+                      className={`flex items-center gap-1.5 text-xs font-bold ${pr.textClass}`}
+                    >
+                      <span className={`w-2 h-2 rounded-full ${pr.dot}`} />
+                      {pr.label}
+                    </span>
+                  </td>
+                  <td className="p-md font-body-sm text-slate-500">
+                    {formatCaseUpdated(r.updatedAt)}
+                  </td>
+                  <td className="p-md text-right">
+                    <Link
+                      to={`/cases/${encodeURIComponent(r.id)}`}
+                      className="text-primary hover:text-teal-700 font-semibold text-sm"
+                    >
+                      {t("cases.details")}
+                    </Link>
+                  </td>
+                </tr>
+              );
+            })
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export default function CasesPage() {
   const { t } = useTranslation();
   const { user } = useSession();
@@ -72,6 +199,11 @@ export default function CasesPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [listVersion, setListVersion] = useState(0);
+
+  // Search & Filter State (styled like AuditPage)
+  const [searchQuery, setSearchQuery] = useState("");
+  const [priorityFilter, setPriorityFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -126,13 +258,76 @@ export default function CasesPage() {
     ).length;
     const active = cases.filter((c) => {
       const s = c.status.toLowerCase();
-      return s.includes("open") || s.includes("active");
+      return !s.includes("closed") && !s.includes("resolved");
     }).length;
     const escalated = cases.filter((c) =>
       c.status.toLowerCase().includes("escalat"),
     ).length;
     return { total, pending, active, escalated };
   }, [cases]);
+
+  // Separate Active and Closed cases
+  const { activeCases, closedCases } = useMemo(() => {
+    const active: ApiCase[] = [];
+    const closed: ApiCase[] = [];
+    for (const c of cases) {
+      const s = c.status?.toLowerCase() ?? "";
+      if (s.includes("closed") || s.includes("resolved")) {
+        closed.push(c);
+      } else {
+        active.push(c);
+      }
+    }
+    return { activeCases: active, closedCases: closed };
+  }, [cases]);
+
+  // Filtering function
+  const matchesFilter = (c: ApiCase) => {
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      const numMatch = c.caseNumber?.toLowerCase().includes(q);
+      const titleMatch = c.title?.toLowerCase().includes(q);
+      const agencyMatch = c.tenant?.name?.toLowerCase().includes(q);
+      const deptMatch =
+        (c as unknown as { currentDepartment?: { name?: string; code?: string } })
+          .currentDepartment?.name?.toLowerCase().includes(q) ||
+        (c as unknown as { currentDepartment?: { name?: string; code?: string } })
+          .currentDepartment?.code?.toLowerCase().includes(q);
+      const statusMatch = c.status?.toLowerCase().includes(q);
+      if (!numMatch && !titleMatch && !agencyMatch && !deptMatch && !statusMatch) {
+        return false;
+      }
+    }
+    if (priorityFilter) {
+      if (c.priority?.toLowerCase() !== priorityFilter.toLowerCase()) {
+        return false;
+      }
+    }
+    if (statusFilter) {
+      const s = c.status?.toLowerCase() ?? "";
+      if (statusFilter === "closed") {
+        if (!s.includes("closed") && !s.includes("resolved")) return false;
+      } else if (!s.includes(statusFilter.toLowerCase())) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const filteredActiveCases = useMemo(() => {
+    if (statusFilter === "closed") return [];
+    return activeCases.filter(matchesFilter);
+  }, [activeCases, searchQuery, priorityFilter, statusFilter]);
+
+  const filteredClosedCases = useMemo(() => {
+    return closedCases.filter(matchesFilter);
+  }, [closedCases, searchQuery, priorityFilter, statusFilter]);
+
+  const clearFilters = () => {
+    setSearchQuery("");
+    setPriorityFilter("");
+    setStatusFilter("");
+  };
 
   if (loadState === "forbidden") {
     return (
@@ -180,7 +375,7 @@ export default function CasesPage() {
               type="button"
               disabled={!tenantId || !user?.id}
               onClick={() => setCreateOpen(true)}
-              className="bg-primary text-white px-6 py-2.5 rounded-lg font-semibold flex items-center gap-2 hover:bg-primary-container transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              className="bg-primary text-white px-6 py-2.5 rounded-lg font-semibold flex items-center gap-2 hover:bg-primary-container transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
               <span className="material-symbols-outlined">add</span>
               {t("cases.createCase")}
@@ -221,6 +416,97 @@ export default function CasesPage() {
         </div>
       </div>
 
+      {/* ── Search & Filters Bar (Design based on AuditPage) ── */}
+      <div className="bg-white border border-outline-variant rounded-xl shadow-sm p-4 mb-6 space-y-4">
+        <div className="flex flex-wrap gap-3 items-end">
+          <div className="flex-1 min-w-[220px]">
+            <label
+              className="block text-[10px] font-label-caps text-slate-500 mb-1"
+              htmlFor="cases-search"
+            >
+              Search Cases
+            </label>
+            <div className="relative flex items-center">
+              <span className="material-symbols-outlined absolute left-3 text-slate-400 text-[18px] pointer-events-none">
+                search
+              </span>
+              <input
+                id="cases-search"
+                type="search"
+                placeholder="Search by case number, title, agency, department..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              />
+            </div>
+          </div>
+
+          <div className="min-w-[140px]">
+            <label
+              className="block text-[10px] font-label-caps text-slate-500 mb-1"
+              htmlFor="cases-priority"
+            >
+              Priority
+            </label>
+            <select
+              id="cases-priority"
+              value={priorityFilter}
+              onChange={(e) => setPriorityFilter(e.target.value)}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+            >
+              <option value="">All Priorities</option>
+              <option value="critical">Critical</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </select>
+          </div>
+
+          <div className="min-w-[140px]">
+            <label
+              className="block text-[10px] font-label-caps text-slate-500 mb-1"
+              htmlFor="cases-status"
+            >
+              Status Filter
+            </label>
+            <select
+              id="cases-status"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+            >
+              <option value="">All Active</option>
+              <option value="open">Open</option>
+              <option value="pending">Pending</option>
+              <option value="in_progress">In Progress</option>
+              <option value="escalated">Escalated</option>
+              <option value="closed">Closed / Finished</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2 justify-between items-center pt-2 border-t border-slate-100">
+          <p className="text-xs text-slate-500">
+            Showing <span className="font-semibold text-slate-700">{filteredActiveCases.length}</span> active case{filteredActiveCases.length === 1 ? "" : "s"}
+            {searchQuery ? ` matching "${searchQuery}"` : ""}
+            {closedCases.length > 0 ? (
+              <span className="text-slate-400">
+                {" "}• {filteredClosedCases.length} closed/finished available below
+              </span>
+            ) : ""}
+          </p>
+          {(searchQuery || priorityFilter || statusFilter) && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="px-3 py-1 text-xs font-semibold border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-600 transition-colors cursor-pointer"
+            >
+              Clear Filters
+            </button>
+          )}
+        </div>
+      </div>
+
       {loadState === "loading" && (
         <div className="bg-white border border-outline-variant rounded-xl p-12 text-center text-slate-600">
           <span className="material-symbols-outlined text-3xl animate-pulse">
@@ -241,131 +527,68 @@ export default function CasesPage() {
       )}
 
       {loadState === "ok" && (
-        <div className="bg-white border border-outline-variant rounded-xl overflow-hidden">
-          <div className="p-lg border-b border-outline-variant bg-slate-50 flex flex-wrap gap-4 items-center justify-between">
-            <p className="text-sm text-slate-600">{t("cases.dataSource")}</p>
-          </div>
+        <div className="space-y-6">
+          {/* ── Active Cases Table (Closed cases excluded) ── */}
+          <div className="bg-white border border-outline-variant rounded-xl overflow-hidden shadow-2xs">
+            <CasesTable
+              cases={filteredActiveCases}
+              tenantId={tenantId ?? undefined}
+              emptyMessage={
+                searchQuery.trim() || priorityFilter || statusFilter
+                  ? "No active cases match the selected filters."
+                  : t("cases.empty")
+              }
+              t={t}
+            />
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[980px]">
-              <thead className="bg-primary text-white">
-                <tr>
-                  {[
-                    t("cases.table.caseNumber"),
-                    t("cases.table.subject"),
-                    t("cases.table.agency"),
-                    "Department",
-                    t("cases.table.status"),
-                    t("cases.table.priority"),
-                    t("cases.table.lastUpdated"),
-                    t("cases.table.actions"),
-                  ].map((h) => (
-                    <th
-                      key={h}
-                      className={`p-md font-label-caps tracking-widest text-xs ${h === t("cases.table.actions") ? "text-right" : ""}`}
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200">
-                {cases.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={8}
-                      className="p-lg text-center text-slate-500 font-body-sm"
-                    >
-                      {t("cases.empty")}
-                    </td>
-                  </tr>
-                ) : (
-                  cases.map((r, i) => {
-                    const stClass = statusBadgeClass(r.status);
-                    const pr = priorityDisplay(r.priority);
-                    const incomingReferral = isIncomingPendingReferral(
-                      r,
-                      tenantId ?? undefined,
-                    );
-                    return (
-                      <tr
-                        key={r.id}
-                        className={`${i % 2 === 1 ? "bg-surface-container-low " : ""}hover:bg-slate-50 transition-colors`}
-                      >
-                        <td className="p-md font-system-id text-slate-600">
-                          {r.caseNumber}
-                          {incomingReferral && (
-                            <span className="block mt-1 text-[10px] font-bold uppercase text-teal-800 bg-teal-50 border border-teal-200 rounded px-1.5 py-0.5 w-fit">
-                              {t("cases.incomingReferralBadge")}
-                            </span>
-                          )}
-                        </td>
-                        <td className="p-md font-body-sm font-semibold text-slate-900">
-                          {r.title}
-                        </td>
-                        <td className="p-md font-body-sm text-slate-700">
-                          {r.tenant?.name ?? "—"}
-                        </td>
-                        <td className="p-md text-xs text-slate-600">
-                          {(
-                            r as unknown as {
-                              currentDepartment?: {
-                                name?: string;
-                                code?: string;
-                              };
-                            }
-                          ).currentDepartment?.name ??
-                            (
-                              r as unknown as {
-                                currentDepartment?: {
-                                  name?: string;
-                                  code?: string;
-                                };
-                              }
-                            ).currentDepartment?.code ??
-                            "—"}
-                        </td>
-                        <td className="p-md">
-                          <span
-                            className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${stClass}`}
-                          >
-                            {r.status.toUpperCase()}
-                          </span>
-                        </td>
-                        <td className="p-md">
-                          <span
-                            className={`flex items-center gap-1.5 text-xs font-bold ${pr.textClass}`}
-                          >
-                            <span
-                              className={`w-2 h-2 rounded-full ${pr.dot}`}
-                            />
-                            {pr.label}
-                          </span>
-                        </td>
-                        <td className="p-md font-body-sm text-slate-500">
-                          {formatCaseUpdated(r.updatedAt)}
-                        </td>
-                        <td className="p-md text-right">
-                          <Link
-                            to={`/cases/${encodeURIComponent(r.id)}`}
-                            className="text-primary hover:text-teal-700 font-semibold text-sm"
-                          >
-                            {t("cases.details")}
-                          </Link>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="p-lg border-t border-outline-variant bg-slate-50 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="text-sm text-slate-500">
-              {t("cases.showingCount", { count: cases.length })}
+            <div className="p-lg border-t border-outline-variant bg-slate-50 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="text-sm text-slate-500">
+                {t("cases.showingCount", { count: filteredActiveCases.length })}
+                {searchQuery || priorityFilter || statusFilter
+                  ? ` (filtered from ${activeCases.length} active)`
+                  : ""}
+              </div>
             </div>
           </div>
+
+          {/* ── Closed / Finished Cases (Collapsed Section, auto-opens when search matches) ── */}
+          {closedCases.length > 0 && (
+            <section className="pt-2">
+              <details
+                className="group"
+                open={Boolean(searchQuery.trim() && filteredClosedCases.length > 0) || statusFilter === "closed"}
+              >
+                <summary className="cursor-pointer list-none flex items-center justify-between p-4 bg-slate-100 hover:bg-slate-200/80 border border-slate-200 rounded-xl transition-all select-none">
+                  <div className="flex items-center gap-2.5">
+                    <span className="material-symbols-outlined text-[20px] text-slate-500 group-open:rotate-90 transition-transform">
+                      chevron_right
+                    </span>
+                    <span className="font-semibold text-slate-800 text-sm">
+                      Closed & Finished Cases ({filteredClosedCases.length} of {closedCases.length})
+                    </span>
+                    <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-200/90 text-slate-700 font-medium border border-slate-300/50">
+                      Archived / Resolved
+                    </span>
+                  </div>
+                  <span className="text-xs text-slate-500 font-medium group-open:hidden flex items-center gap-1">
+                    Click to expand
+                    <span className="material-symbols-outlined text-[16px]">expand_more</span>
+                  </span>
+                </summary>
+                <div className="mt-3 bg-white border border-outline-variant rounded-xl overflow-hidden opacity-95 shadow-2xs">
+                  <CasesTable
+                    cases={filteredClosedCases}
+                    tenantId={tenantId ?? undefined}
+                    emptyMessage="No closed or finished cases match the search query."
+                    t={t}
+                  />
+                  <div className="p-md border-t border-outline-variant bg-slate-50 text-xs text-slate-500">
+                    Showing {filteredClosedCases.length} closed/finished case(s)
+                  </div>
+                </div>
+              </details>
+            </section>
+          )}
         </div>
       )}
     </div>

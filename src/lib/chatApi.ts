@@ -1,3 +1,5 @@
+import { apiPost, apiPatch, apiDelete } from './api';
+
 export type ChatUser = {
   id: string;
   email?: string;
@@ -10,6 +12,8 @@ export type ChatParticipant = {
   userId: string;
   role: 'MEMBER' | 'ADMIN' | 'OWNER';
   user?: ChatUser;
+  lastReadMessageId?: string | null;
+  lastReadAt?: string | null;
 };
 
 export type ChatConversation = {
@@ -22,29 +26,77 @@ export type ChatConversation = {
   unreadCount?: number;
 };
 
+export type ChatReaction = {
+  emoji: string;
+  userId: string;
+};
+
+export type ChatReplyPreview = {
+  id: string;
+  content?: string | null;
+  messageType?: string;
+  senderId?: string;
+  sender?: {
+    id?: string;
+    firstName?: string;
+    lastName?: string;
+  };
+};
+
+export type ChatAttachment = {
+  id?: string;
+  fileId: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  createdAt?: string;
+};
+
 export type ChatMessage = {
   id: string;
   conversationId: string;
   senderId: string;
   clientMessageId: string;
   messageType: 'TEXT' | 'IMAGE' | 'FILE';
-  content: string;
+  content?: string | null;
   createdAt: string;
+  editedAt?: string | null;
+  deletedAt?: string | null;
+  replyToId?: string | null;
+  replyTo?: ChatReplyPreview | null;
+  reactions?: ChatReaction[];
   sender?: ChatUser;
+  attachments?: ChatAttachment[];
 };
 
 export function chatUserLabel(u: ChatUser | null | undefined): string {
-  if (!u) return "Unknown";
-  const name = `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim();
-  return name || u.email || u.username || "Unknown";
+  if (!u) return 'Unknown';
+  const name = `${u.firstName ?? ''} ${u.lastName ?? ''}`.trim();
+  return name || u.email || u.username || 'Unknown';
 }
 
 export function chatUserInitials(u: ChatUser | null | undefined): string {
   const label = chatUserLabel(u);
-  if (label === "Unknown") return "?";
+  if (label === 'Unknown') return '?';
   const parts = label.split(/\s+/).filter(Boolean);
   if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
   return label.slice(0, 2).toUpperCase();
+}
+
+export async function addMessageReaction(conversationId: string, messageId: string, emoji: string) {
+  return apiPost(`/api/v1/chat/conversations/${conversationId}/messages/${messageId}/reactions`, { emoji });
+}
+
+export async function removeMessageReaction(conversationId: string, messageId: string, emoji: string) {
+  return apiDelete(`/api/v1/chat/conversations/${conversationId}/messages/${messageId}/reactions/${encodeURIComponent(emoji)}`);
+}
+
+export async function updateMessage(conversationId: string, messageId: string, content: string) {
+  return apiPatch(`/api/v1/chat/conversations/${conversationId}/messages/${messageId}`, { content });
+}
+
+export async function deleteMessage(conversationId: string, messageId: string) {
+  return apiDelete(`/api/v1/chat/conversations/${conversationId}/messages/${messageId}`);
 }
 
 /**
@@ -58,11 +110,11 @@ export class ChatWebSocketClient {
   private manuallyDisconnected = false;
   private reconnectTimer: any = null;
   private reconnectAttempts = 0;
-  private url = "";
+  private url = '';
 
   constructor(private token: string) {}
 
-  connect(url: string = "") {
+  connect(url: string = '') {
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
       return;
     }
@@ -87,7 +139,7 @@ export class ChatWebSocketClient {
         }
         // 2. Re-subscribe to any active conversations
         this.subscribedConversations.forEach(conversationId => {
-          this.ws?.send(JSON.stringify({ action: "subscribe", conversationId }));
+          this.ws?.send(JSON.stringify({ action: 'subscribe', conversationId }));
         });
       };
 
@@ -96,12 +148,12 @@ export class ChatWebSocketClient {
           const data = JSON.parse(event.data);
           // Auto-respond to heartbeat pings from server
           if (data.type === 'ping') {
-            this.send({ action: "pong" });
+            this.send({ action: 'pong' });
             return;
           }
           this.messageHandlers.forEach(h => h(data));
         } catch (e) {
-          console.error("[ChatWS] Failed to parse WS message", e);
+          console.error('[ChatWS] Failed to parse WS message', e);
         }
       };
 
@@ -113,10 +165,10 @@ export class ChatWebSocketClient {
       };
 
       this.ws.onerror = (err) => {
-        console.warn("[ChatWS] WebSocket error:", err);
+        console.warn('[ChatWS] WebSocket error:', err);
       };
     } catch (e) {
-      console.error("[ChatWS] Connection error:", e);
+      console.error('[ChatWS] Connection error:', e);
       this.scheduleReconnect();
     }
   }
@@ -135,20 +187,20 @@ export class ChatWebSocketClient {
 
   subscribeToConversation(conversationId: string) {
     this.subscribedConversations.add(conversationId);
-    this.send({ action: "subscribe", conversationId });
+    this.send({ action: 'subscribe', conversationId });
   }
 
   unsubscribeFromConversation(conversationId: string) {
     this.subscribedConversations.delete(conversationId);
-    this.send({ action: "unsubscribe", conversationId });
+    this.send({ action: 'unsubscribe', conversationId });
   }
 
   sendTyping(conversationId: string, isTyping: boolean) {
-    this.send({ action: "typing", conversationId, isTyping });
+    this.send({ action: 'typing', conversationId, isTyping });
   }
 
   sendFocus(conversationId: string | null) {
-    this.send({ action: "focus", conversationId });
+    this.send({ action: 'focus', conversationId });
   }
 
   onMessage(handler: (msg: any) => void) {
