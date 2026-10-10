@@ -271,6 +271,18 @@ function ChatAudioAttachment({
 
   const audioSrc = `/api/v1/files/${fileId}/download`;
 
+  // Parse duration from filename e.g. "Voice message (0:14).webm"
+  const parseDurationFromName = (name: string): number => {
+    const match = name.match(/\((\d+):(\d+)\)/);
+    if (match) {
+      return parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
+    }
+    return 0;
+  };
+
+  const fallbackDuration = parseDurationFromName(fileName);
+  const effectiveDuration = isFinite(duration) && !isNaN(duration) && duration > 0 ? duration : fallbackDuration;
+
   const togglePlay = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!audioRef.current) return;
@@ -283,27 +295,47 @@ function ChatAudioAttachment({
 
   const handleTimeUpdate = () => {
     if (audioRef.current) {
-      setCurrentTime(audioRef.current.currentTime);
+      const cur = audioRef.current.currentTime;
+      if (isFinite(cur) && !isNaN(cur)) {
+        setCurrentTime(cur);
+      }
     }
   };
 
   const handleLoadedMetadata = () => {
     if (audioRef.current) {
-      setDuration(audioRef.current.duration || 0);
+      const d = audioRef.current.duration;
+      if (isFinite(d) && !isNaN(d) && d > 0) {
+        setDuration(d);
+      } else {
+        // Chromium WebM duration fix
+        const audio = audioRef.current;
+        const initial = audio.currentTime;
+        audio.currentTime = 1e8;
+        audio.ontimeupdate = () => {
+          audio.ontimeupdate = null;
+          if (isFinite(audio.duration) && !isNaN(audio.duration) && audio.duration > 0) {
+            setDuration(audio.duration);
+          }
+          audio.currentTime = initial;
+        };
+      }
     }
   };
 
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
     e.stopPropagation();
     const val = parseFloat(e.target.value);
-    setCurrentTime(val);
-    if (audioRef.current) {
-      audioRef.current.currentTime = val;
+    if (isFinite(val) && !isNaN(val)) {
+      setCurrentTime(val);
+      if (audioRef.current) {
+        audioRef.current.currentTime = val;
+      }
     }
   };
 
   const formatSec = (secs: number) => {
-    if (isNaN(secs) || secs < 0) return "0:00";
+    if (typeof secs !== "number" || isNaN(secs) || !isFinite(secs) || secs < 0) return "0:00";
     const m = Math.floor(secs / 60);
     const s = Math.floor(secs % 60);
     return `${m}:${s < 10 ? "0" : ""}${s}`;
@@ -341,17 +373,15 @@ function ChatAudioAttachment({
         <input
           type="range"
           min={0}
-          max={duration || 100}
+          max={effectiveDuration > 0 ? effectiveDuration : 100}
           step={0.1}
-          value={currentTime}
+          value={isFinite(currentTime) && !isNaN(currentTime) ? currentTime : 0}
           onChange={handleSeek}
           className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-teal-600"
         />
-        <div className="flex items-center justify-between text-[11px] text-teal-800 font-semibold px-0.5 gap-2">
+        <div className="flex items-center justify-between text-[11px] text-teal-800 font-semibold px-0.5 gap-2 select-none">
           <span>{formatSec(currentTime)}</span>
-          <span className="truncate max-w-[120px]" title={fileName}>
-            {duration > 0 ? formatSec(duration) : (sizeBytes ? `${(sizeBytes / 1024).toFixed(0)} KB` : "Audio")}
-          </span>
+          <span>{effectiveDuration > 0 ? formatSec(effectiveDuration) : (sizeBytes ? `${(sizeBytes / 1024).toFixed(0)} KB` : "0:00")}</span>
         </div>
       </div>
     </div>
@@ -492,13 +522,22 @@ export default function ChatPage() {
   // ── Phase 2.3 State: Audio Recording & Rich Emoji Picker ───────────────────
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
   const [isRecordingAudio, setIsRecordingAudio] = useState(false);
+  const [isLockedAudio, setIsLockedAudio] = useState(false);
+  const [isPausedAudio, setIsPausedAudio] = useState(false);
+  const [slideUpOffset, setSlideUpOffset] = useState(0);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [isUploadingAudio, setIsUploadingAudio] = useState(false);
+  const isRecordingAudioRef = useRef<boolean>(false);
+  const isLockedAudioRef = useRef<boolean>(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingTimerRef = useRef<any>(null);
+  const recordingDurationRef = useRef<number>(0);
   const audioStreamRef = useRef<MediaStream | null>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
+  const micTouchStartY = useRef<number | null>(null);
+  const micTouchStartX = useRef<number | null>(null);
+  const micPressStartTimeRef = useRef<number>(0);
 
   // Close emoji picker on click outside
   useEffect(() => {
@@ -1059,14 +1098,20 @@ export default function ChatPage() {
       };
 
       recorder.start(200);
+      isRecordingAudioRef.current = true;
       setIsRecordingAudio(true);
+      setIsPausedAudio(false);
       setRecordingDuration(0);
+      recordingDurationRef.current = 0;
 
       recordingTimerRef.current = setInterval(() => {
+        recordingDurationRef.current += 1;
         setRecordingDuration((prev) => prev + 1);
       }, 1000);
     } catch (err: any) {
       console.error("Microphone access error:", err);
+      setIsRecordingAudio(false);
+      setIsLockedAudio(false);
       alert(
         err?.name === "NotAllowedError"
           ? "Microphone access was denied. Please allow microphone permissions in your browser to record voice messages."
@@ -1075,9 +1120,29 @@ export default function ChatPage() {
     }
   };
 
+  const togglePauseAudio = () => {
+    if (!mediaRecorderRef.current) return;
+    if (mediaRecorderRef.current.state === "recording") {
+      mediaRecorderRef.current.pause();
+      setIsPausedAudio(true);
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
+    } else if (mediaRecorderRef.current.state === "paused") {
+      mediaRecorderRef.current.resume();
+      setIsPausedAudio(false);
+      recordingTimerRef.current = setInterval(() => {
+        recordingDurationRef.current += 1;
+        setRecordingDuration((prev) => prev + 1);
+      }, 1000);
+    }
+  };
+
   const cancelRecordingAudio = () => {
     if (recordingTimerRef.current) {
       clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
     }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       mediaRecorderRef.current.stop();
@@ -1087,8 +1152,16 @@ export default function ChatPage() {
       audioStreamRef.current = null;
     }
     audioChunksRef.current = [];
+    isRecordingAudioRef.current = false;
+    isLockedAudioRef.current = false;
     setIsRecordingAudio(false);
+    setIsLockedAudio(false);
+    setIsPausedAudio(false);
+    setSlideUpOffset(0);
     setRecordingDuration(0);
+    recordingDurationRef.current = 0;
+    micTouchStartY.current = null;
+    micTouchStartX.current = null;
   };
 
   const stopAndSendAudio = async () => {
@@ -1098,9 +1171,16 @@ export default function ChatPage() {
       clearInterval(recordingTimerRef.current);
     }
 
-    const durationSec = recordingDuration;
+    const durationSec = recordingDurationRef.current || recordingDuration;
+    isRecordingAudioRef.current = false;
+    isLockedAudioRef.current = false;
     setIsRecordingAudio(false);
+    setIsLockedAudio(false);
+    setIsPausedAudio(false);
+    setSlideUpOffset(0);
     setIsUploadingAudio(true);
+    micTouchStartY.current = null;
+    micTouchStartX.current = null;
 
     const recorder = mediaRecorderRef.current;
 
@@ -1139,10 +1219,11 @@ export default function ChatPage() {
           },
         ];
 
+        // Send with content = "" so no redundant "voice message" text is saved or shown
         const res = (await apiPost(
           `/api/v1/chat/conversations/${activeConversationId}/messages`,
           {
-            content: `🎤 Voice message (${formatTime(durationSec)})`,
+            content: "",
             clientMessageId,
             messageType: "FILE",
             attachments: attachmentPayload,
@@ -1159,11 +1240,101 @@ export default function ChatPage() {
       } finally {
         setIsUploadingAudio(false);
         setRecordingDuration(0);
+        recordingDurationRef.current = 0;
         audioChunksRef.current = [];
       }
     };
 
     recorder.stop();
+  };
+
+  const lockAudioRecording = () => {
+    isLockedAudioRef.current = true;
+    setIsLockedAudio(true);
+    setSlideUpOffset(0);
+    micTouchStartY.current = null;
+    micTouchStartX.current = null;
+  };
+
+  // Window-level tracking during recording so dragging or moving up works anywhere on screen
+  useEffect(() => {
+    if (!isRecordingAudio || isLockedAudio) return;
+
+    const onWindowMove = (clientY: number, clientX: number) => {
+      if (isLockedAudioRef.current || micTouchStartY.current === null) return;
+      const deltaY = micTouchStartY.current - clientY;
+      const deltaX = micTouchStartX.current !== null ? micTouchStartX.current - clientX : 0;
+
+      if (deltaY > 0) {
+        setSlideUpOffset(Math.min(deltaY, 60));
+        if (deltaY >= 20) {
+          lockAudioRecording();
+          return;
+        }
+      }
+
+      if (deltaX >= 70) {
+        cancelRecordingAudio();
+      }
+    };
+
+    const handleWindowPointerMove = (e: PointerEvent) => {
+      onWindowMove(e.clientY, e.clientX);
+    };
+
+    const handleWindowTouchMove = (e: TouchEvent) => {
+      if (e.touches[0]) {
+        onWindowMove(e.touches[0].clientY, e.touches[0].clientX);
+      }
+    };
+
+    const handleWindowRelease = () => {
+      if (isLockedAudioRef.current) return;
+      
+      const durationHeldMs = Date.now() - micPressStartTimeRef.current;
+      micTouchStartY.current = null;
+      micTouchStartX.current = null;
+
+      // If user held and released after speaking (> 350ms):
+      if (durationHeldMs > 350) {
+        if (recordingDurationRef.current < 1) {
+          cancelRecordingAudio();
+        } else {
+          void stopAndSendAudio();
+        }
+      }
+      // If it was a quick click (< 350ms), we keep recording alive so user can tap or hover the lock pill!
+    };
+
+    window.addEventListener("pointermove", handleWindowPointerMove);
+    window.addEventListener("pointerup", handleWindowRelease);
+    window.addEventListener("touchmove", handleWindowTouchMove);
+    window.addEventListener("touchend", handleWindowRelease);
+
+    return () => {
+      window.removeEventListener("pointermove", handleWindowPointerMove);
+      window.removeEventListener("pointerup", handleWindowRelease);
+      window.removeEventListener("touchmove", handleWindowTouchMove);
+      window.removeEventListener("touchend", handleWindowRelease);
+    };
+  }, [isRecordingAudio, isLockedAudio]);
+
+  const handleMicPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (!activeConversationId || isUploadingAudio || sendBusy) return;
+
+    // If already recording unlocked, second click acts as stop & send
+    if (isRecordingAudioRef.current && !isLockedAudioRef.current) {
+      void stopAndSendAudio();
+      return;
+    }
+
+    micPressStartTimeRef.current = Date.now();
+    micTouchStartY.current = e.clientY;
+    micTouchStartX.current = e.clientX;
+    isLockedAudioRef.current = false;
+    setIsLockedAudio(false);
+    setSlideUpOffset(0);
+    void startRecordingAudio();
   };
 
   // ── Send Message ──────────────────────────────────────────────────────────
@@ -2150,7 +2321,7 @@ export default function ChatPage() {
                             </button>
                           </div>
                         </div>
-                      ) : m.content && m.content.trim() ? (
+                      ) : m.content && m.content.trim() && !m.content.startsWith("🎤 Voice message") && m.content !== "Voice message" ? (
                         <div className="flex items-end gap-2 flex-wrap">
                           <p className="text-[14px] text-slate-900 leading-relaxed whitespace-pre-wrap break-words min-w-0 flex-1">
                             {m.content}
@@ -2395,50 +2566,69 @@ export default function ChatPage() {
               </div>
             )}
 
-            <div className="flex items-end gap-1 px-3 py-1.5">
-              {/* Attachment Icon */}
-              <button
-                type="button"
-                disabled={!activeConversationId}
-                onClick={() => fileInputRef.current?.click()}
-                className="w-10 h-10 flex items-center justify-center text-slate-400 hover:text-teal-600 disabled:opacity-40 transition-colors shrink-0 rounded-full hover:bg-slate-100"
-                title="Attach file or photo"
-              >
-                <span className="material-symbols-outlined text-[24px]">attach_file</span>
-              </button>
+            <div className={`flex items-end gap-1 px-3 py-1.5 transition-colors ${
+              isRecordingAudio ? "bg-teal-50/60" : ""
+            }`}>
+              {/* Attachment Icon (hidden while recording) */}
+              {!isRecordingAudio && (
+                <button
+                  type="button"
+                  disabled={!activeConversationId}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-10 h-10 flex items-center justify-center text-slate-400 hover:text-teal-600 disabled:opacity-40 transition-colors shrink-0 rounded-full hover:bg-slate-100"
+                  title="Attach file or photo"
+                >
+                  <span className="material-symbols-outlined text-[24px]">attach_file</span>
+                </button>
+              )}
 
-              {/* Center: Message Text Area or Recording Bar */}
+              {/* Center: Message Text Area or Seamless Recording Bar */}
               {isRecordingAudio ? (
-                <div className="flex-1 flex items-center justify-between bg-red-50/90 border border-red-200/90 rounded-2xl px-4 py-2 animate-in fade-in duration-150">
-                  <div className="flex items-center gap-3">
-                    <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping shrink-0" />
-                    <span className="text-red-700 font-bold text-sm font-mono tracking-wide">
+                <div className="flex-1 flex items-center justify-between min-h-[40px] px-2 py-0.5">
+                  <div className="flex items-center gap-2.5">
+                    <span className={`w-2.5 h-2.5 rounded-full bg-teal-500 shrink-0 ${isPausedAudio ? "" : "animate-ping"}`} />
+                    <span className="text-teal-900 font-bold text-sm font-mono tracking-wide">
                       {Math.floor(recordingDuration / 60).toString().padStart(2, "0")}:{(recordingDuration % 60).toString().padStart(2, "0")}
                     </span>
-                    <span className="text-xs text-red-600/80 font-medium hidden sm:inline">Recording voice note...</span>
+                    {isPausedAudio && (
+                      <span className="text-[10px] text-teal-800 bg-teal-100/90 px-2 py-0.5 rounded-full font-semibold">
+                        Paused
+                      </span>
+                    )}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={cancelRecordingAudio}
-                      className="p-1.5 rounded-full text-slate-500 hover:text-red-600 hover:bg-red-100/80 transition-colors cursor-pointer"
-                      title="Discard recording"
-                    >
-                      <span className="material-symbols-outlined text-[20px]">delete</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={stopAndSendAudio}
-                      className="px-3.5 py-1.5 rounded-full bg-teal-600 hover:bg-teal-700 text-white font-medium text-xs flex items-center gap-1.5 shadow-xs transition-transform active:scale-95 cursor-pointer"
-                      title="Send voice note"
-                    >
-                      <span>Send</span>
-                      <span className="material-symbols-outlined text-[16px]">send</span>
-                    </button>
-                  </div>
+
+                  {isLockedAudio ? (
+                    <div className="flex items-center gap-1">
+                      {/* Pause button comes first */}
+                      <button
+                        type="button"
+                        onClick={togglePauseAudio}
+                        className="w-9 h-9 rounded-full flex items-center justify-center text-teal-700 hover:text-teal-900 hover:bg-teal-100/80 transition-colors cursor-pointer"
+                        title={isPausedAudio ? "Resume recording" : "Pause recording"}
+                      >
+                        <span className="material-symbols-outlined text-[20px]">
+                          {isPausedAudio ? "play_arrow" : "pause"}
+                        </span>
+                      </button>
+                      {/* Delete / Cancel button comes second */}
+                      <button
+                        type="button"
+                        onClick={cancelRecordingAudio}
+                        className="w-9 h-9 rounded-full flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-slate-100 transition-colors cursor-pointer"
+                        title="Cancel recording"
+                      >
+                        <span className="material-symbols-outlined text-[20px]">delete</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="text-xs text-slate-400 flex items-center gap-1 select-none">
+                      <span className="material-symbols-outlined text-[16px]">chevron_left</span>
+                      <span>Slide left to cancel</span>
+                    </div>
+                  )}
                 </div>
               ) : isUploadingAudio ? (
-                <div className="flex-1 flex items-center gap-2.5 px-4 py-2 bg-teal-50 border border-teal-200 rounded-2xl text-xs text-teal-700 font-semibold animate-pulse">
+                <div className="flex-1 flex items-center gap-2.5 px-3 min-h-[40px] text-xs text-teal-700 font-semibold animate-pulse">
                   <span className="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>
                   <span>Uploading voice message...</span>
                 </div>
@@ -2471,35 +2661,37 @@ export default function ChatPage() {
                 </div>
               )}
 
-              {/* Emoji Picker Popover & Smile Button */}
-              <div className="relative" ref={emojiPickerRef}>
-                <button
-                  type="button"
-                  disabled={!activeConversationId || isRecordingAudio}
-                  onClick={() => setIsEmojiPickerOpen((prev) => !prev)}
-                  className={`w-10 h-10 flex items-center justify-center transition-colors shrink-0 rounded-full ${
-                    isEmojiPickerOpen ? "text-teal-600 bg-teal-50" : "text-slate-400 hover:text-teal-600 hover:bg-slate-100"
-                  } disabled:opacity-40 cursor-pointer`}
-                  title="Emoji Picker"
-                >
-                  <span className="material-symbols-outlined text-[24px]">sentiment_satisfied</span>
-                </button>
-                {isEmojiPickerOpen && (
-                  <EmojiPickerPopover
-                    onSelect={(emoji) => {
-                      setDraft((prev) => prev + emoji);
-                      textareaRef.current?.focus();
-                    }}
-                    onClose={() => setIsEmojiPickerOpen(false)}
-                  />
-                )}
-              </div>
+              {/* Emoji Picker Popover & Smile Button (hidden while recording) */}
+              {!isRecordingAudio && (
+                <div className="relative" ref={emojiPickerRef}>
+                  <button
+                    type="button"
+                    disabled={!activeConversationId}
+                    onClick={() => setIsEmojiPickerOpen((prev) => !prev)}
+                    className={`w-10 h-10 flex items-center justify-center transition-colors shrink-0 rounded-full ${
+                      isEmojiPickerOpen ? "text-teal-600 bg-teal-50" : "text-slate-400 hover:text-teal-600 hover:bg-slate-100"
+                    } disabled:opacity-40 cursor-pointer`}
+                    title="Emoji Picker"
+                  >
+                    <span className="material-symbols-outlined text-[24px]">sentiment_satisfied</span>
+                  </button>
+                  {isEmojiPickerOpen && (
+                    <EmojiPickerPopover
+                      onSelect={(emoji) => {
+                        setDraft((prev) => prev + emoji);
+                        textareaRef.current?.focus();
+                      }}
+                      onClose={() => setIsEmojiPickerOpen(false)}
+                    />
+                  )}
+                </div>
+              )}
 
-              {/* Mic / Send Button */}
+              {/* Far Right: Normal Send, Locked Send, or Mic Button */}
               {draft.trim() || stagedAttachment?.fileId ? (
                 <button
                   type="submit"
-                  disabled={sendBusy || stagedAttachment?.uploading || isRecordingAudio}
+                  disabled={sendBusy || stagedAttachment?.uploading}
                   className="w-10 h-10 rounded-full bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white flex items-center justify-center transition-all shrink-0 shadow-sm cursor-pointer"
                   title="Send message"
                 >
@@ -2507,16 +2699,73 @@ export default function ChatPage() {
                     send
                   </span>
                 </button>
+              ) : isLockedAudio ? (
+                <div className="relative">
+                  {/* Floating lock icon without text */}
+                  <div className="absolute bottom-12 right-1 flex items-center justify-center w-8 h-8 rounded-full bg-teal-600 text-white shadow-lg animate-in fade-in zoom-in-75 duration-150 z-30">
+                    <span className="material-symbols-outlined text-[18px]">lock</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={stopAndSendAudio}
+                    className="w-10 h-10 rounded-full bg-teal-600 hover:bg-teal-700 text-white flex items-center justify-center transition-all shrink-0 shadow-sm cursor-pointer active:scale-95"
+                    title="Send voice note"
+                  >
+                    <span className="material-symbols-outlined text-[20px] ml-0.5" style={{ fontVariationSettings: "'FILL' 1" }}>
+                      send
+                    </span>
+                  </button>
+                </div>
               ) : (
-                <button
-                  type="button"
-                  disabled={!activeConversationId || isUploadingAudio || isRecordingAudio}
-                  onClick={startRecordingAudio}
-                  className="w-10 h-10 flex items-center justify-center text-slate-500 hover:text-teal-600 hover:bg-teal-50 disabled:opacity-40 transition-colors shrink-0 rounded-full cursor-pointer"
-                  title="Record voice message"
-                >
-                  <span className="material-symbols-outlined text-[24px]">mic</span>
-                </button>
+                <div className="relative">
+                  {/* Floating slide-up-to-lock guide when holding and not yet locked */}
+                  {isRecordingAudio && !isLockedAudio && (
+                    <div
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        lockAudioRecording();
+                      }}
+                      onPointerDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        lockAudioRecording();
+                      }}
+                      onPointerEnter={() => lockAudioRecording()}
+                      onMouseEnter={() => lockAudioRecording()}
+                      onTouchStart={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        lockAudioRecording();
+                      }}
+                      className="absolute bottom-12 right-0 flex flex-col items-center gap-1 bg-slate-900/95 text-white text-[11px] font-medium py-2 px-3 rounded-2xl shadow-xl backdrop-blur-xs select-none transition-transform cursor-pointer z-30 hover:bg-slate-800"
+                      style={{ transform: `translateY(-${slideUpOffset}px)` }}
+                      title="Click or slide up to lock"
+                    >
+                      <span className={`material-symbols-outlined text-[20px] transition-all ${
+                        slideUpOffset >= 15 ? "scale-125 text-teal-400" : "animate-bounce text-slate-200"
+                      }`}>
+                        {slideUpOffset >= 20 ? "lock" : "lock_open"}
+                      </span>
+                      <span className="text-[10px] whitespace-nowrap text-slate-200 font-semibold">
+                        {slideUpOffset >= 20 ? "Release to lock" : "Slide up to lock"}
+                      </span>
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    disabled={!activeConversationId || isUploadingAudio}
+                    onPointerDown={handleMicPointerDown}
+                    className={`w-10 h-10 flex items-center justify-center transition-all shrink-0 rounded-full cursor-pointer select-none ${
+                      isRecordingAudio
+                        ? "bg-teal-600 text-white shadow-md scale-110"
+                        : "text-slate-500 hover:text-teal-600 hover:bg-teal-50 disabled:opacity-40"
+                    }`}
+                    title={isRecordingAudio ? "Click to send, or slide up to lock" : "Hold and slide up to lock voice recording"}
+                  >
+                    <span className="material-symbols-outlined text-[24px]">mic</span>
+                  </button>
+                </div>
               )}
             </div>
           </form>
