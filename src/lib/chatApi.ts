@@ -1,4 +1,4 @@
-import { apiPost, apiPatch, apiDelete } from './api';
+import { apiGet, apiPost, apiPatch, apiDelete } from './api';
 
 export type ChatUser = {
   id: string;
@@ -14,12 +14,14 @@ export type ChatParticipant = {
   user?: ChatUser;
   lastReadMessageId?: string | null;
   lastReadAt?: string | null;
+  isMuted?: boolean;
 };
 
 export type ChatConversation = {
   id: string;
   type: 'DIRECT' | 'GROUP';
   title?: string | null;
+  description?: string | null;
   lastMessageId?: string | null;
   lastMessageAt?: string | null;
   participants: ChatParticipant[];
@@ -97,6 +99,43 @@ export async function updateMessage(conversationId: string, messageId: string, c
 
 export async function deleteMessage(conversationId: string, messageId: string) {
   return apiDelete(`/api/v1/chat/conversations/${conversationId}/messages/${messageId}`);
+}
+
+export async function createGroupConversation(title: string, participantIds: string[], description?: string) {
+  return apiPost('/api/v1/chat/conversations', {
+    type: 'GROUP',
+    title,
+    description: description || undefined,
+    participantIds,
+  });
+}
+
+export async function fetchParticipants(conversationId: string): Promise<{ participants: ChatParticipant[] }> {
+  return apiGet(`/api/v1/chat/conversations/${conversationId}/participants`) as Promise<{ participants: ChatParticipant[] }>;
+}
+
+export async function addParticipant(conversationId: string, userId: string, role: string = 'MEMBER') {
+  return apiPost(`/api/v1/chat/conversations/${conversationId}/participants`, { userId, role });
+}
+
+export async function removeParticipant(conversationId: string, userId: string) {
+  return apiDelete(`/api/v1/chat/conversations/${conversationId}/participants/${userId}`);
+}
+
+export async function toggleMuteConversation(conversationId: string, muted: boolean) {
+  return apiPost(`/api/v1/chat/conversations/${conversationId}/participants/mute`, { muted });
+}
+
+export async function pinMessage(conversationId: string, messageId: string) {
+  return apiPost(`/api/v1/chat/conversations/${conversationId}/pin/${messageId}`, {});
+}
+
+export async function unpinMessage(conversationId: string) {
+  return apiDelete(`/api/v1/chat/conversations/${conversationId}/pin`);
+}
+
+export async function fetchPinnedMessage(conversationId: string): Promise<{ pinnedMessage: ChatMessage | null }> {
+  return apiGet(`/api/v1/chat/conversations/${conversationId}/pinned`) as Promise<{ pinnedMessage: ChatMessage | null }>;
 }
 
 /**

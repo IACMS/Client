@@ -7,6 +7,7 @@ import {
   type ChatReaction,
   type ChatUser,
   type ChatAttachment,
+  type ChatParticipant,
   chatUserInitials,
   chatUserLabel,
   ChatWebSocketClient,
@@ -14,6 +15,14 @@ import {
   removeMessageReaction,
   updateMessage,
   deleteMessage,
+  createGroupConversation,
+  fetchParticipants,
+  addParticipant,
+  removeParticipant,
+  toggleMuteConversation,
+  pinMessage,
+  unpinMessage,
+  fetchPinnedMessage,
 } from "@/lib/chatApi";
 import { downloadFile, viewFileBlob, uploadFileAuto } from "@/lib/filesApi";
 import { useSession } from "@/context/SessionContext";
@@ -226,7 +235,8 @@ export default function ChatPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
 
-  // ── Phase 2.1 State: Typing, Replies, Reactions, Edit, Delete ────────────
+  // ── Phase 2.1 & 2.3 State: Search, Pinned, Groups, Drawer ────────────────
+  const [searchQuery, setSearchQuery] = useState("");
   const [typingUsers, setTypingUsers] = useState<Map<string, string>>(new Map());
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
   const [activeReactionPickerMessageId, setActiveReactionPickerMessageId] = useState<string | null>(null);
@@ -234,6 +244,26 @@ export default function ChatPage() {
   const [editingText, setEditingText] = useState("");
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+
+  // ── Pinned Message State ──────────────────────────────────────────────────
+  const [pinnedMessage, setPinnedMessage] = useState<ChatMessage | null>(null);
+
+  // ── New Group Modal State ─────────────────────────────────────────────────
+  const [isNewGroupModalOpen, setIsNewGroupModalOpen] = useState(false);
+  const [groupTitle, setGroupTitle] = useState("");
+  const [groupDesc, setGroupDesc] = useState("");
+  const [selectedColleagues, setSelectedColleagues] = useState<Set<string>>(new Set());
+  const [groupColleagueFilter, setGroupColleagueFilter] = useState("");
+  const [createGroupBusy, setCreateGroupBusy] = useState(false);
+  const [createGroupError, setCreateGroupError] = useState<string | null>(null);
+
+  // ── Group Details Drawer State ────────────────────────────────────────────
+  const [showDetailsDrawer, setShowDetailsDrawer] = useState(false);
+  const [activeParticipants, setActiveParticipants] = useState<ChatParticipant[]>([]);
+  const [isMuted, setIsMuted] = useState(false);
+  const [showAddMember, setShowAddMember] = useState(false);
+  const [addMemberFilter, setAddMemberFilter] = useState("");
+  const [drawerTab, setDrawerTab] = useState<"members" | "media">("members");
 
   // ── Phase 2.2 State: File Attachments & Lightbox ───────────────────────────
   const [stagedAttachment, setStagedAttachment] = useState<StagedAttachment | null>(null);
@@ -457,6 +487,32 @@ export default function ChatPage() {
         }
         return;
       }
+
+      // Pinned Message Updated
+      if (evt.type === "MESSAGE_PINNED") {
+        if (evt.data?.conversationId === activeConversationIdRef.current) {
+          setPinnedMessage(evt.data.message);
+        }
+        return;
+      }
+
+      if (evt.type === "MESSAGE_UNPINNED") {
+        if (evt.data?.conversationId === activeConversationIdRef.current) {
+          setPinnedMessage(null);
+        }
+        return;
+      }
+
+      // Participants Updated
+      if (evt.type === "PARTICIPANT_ADDED" || evt.type === "PARTICIPANT_REMOVED") {
+        const curId = activeConversationIdRef.current;
+        if (curId && evt.data?.conversationId === curId) {
+          void fetchParticipants(curId).then((res) => {
+            setActiveParticipants(res.participants || []);
+          }).catch(() => {});
+        }
+        return;
+      }
     });
 
     return () => {
@@ -559,11 +615,25 @@ export default function ChatPage() {
     }
   }, [loadState, loadColleagues]);
 
-  // Load Messages for Active Conversation
+  const loadParticipants = useCallback(async (convId: string) => {
+    try {
+      const res = await fetchParticipants(convId);
+      setActiveParticipants(res.participants || []);
+      const me = (res.participants || []).find((p) => p.userId === myId);
+      if (me) setIsMuted(Boolean(me.isMuted));
+    } catch (e) {
+      console.warn("Failed to load participants", e);
+    }
+  }, [myId]);
+
+  // Load Messages, Pinned, and Participants for Active Conversation
   useEffect(() => {
     const convId = activeConversationId;
     if (!convId) {
       setMessages([]);
+      setPinnedMessage(null);
+      setActiveParticipants([]);
+      setShowDetailsDrawer(false);
       return;
     }
 
@@ -590,10 +660,19 @@ export default function ChatPage() {
     }
 
     void fetchMessages();
+
+    // Fetch Pinned Message
+    void fetchPinnedMessage(convId).then((res) => {
+      if (!cancelled) setPinnedMessage(res.pinnedMessage);
+    }).catch(() => {});
+
+    // Fetch Participants
+    void loadParticipants(convId);
+
     return () => {
       cancelled = true;
     };
-  }, [activeConversationId, get]);
+  }, [activeConversationId, get, loadParticipants]);
 
   // Mark Read
   async function markActiveConversationRead(conversationId: string | null | undefined, messageId?: string | null) {
@@ -913,6 +992,101 @@ export default function ChatPage() {
     }
   }
 
+  // ── Pinned Message Handlers ────────────────────────────────────────────────
+  async function handleTogglePinMessage(m: ChatMessage) {
+    if (!activeConversationId) return;
+    try {
+      if (pinnedMessage?.id === m.id) {
+        await unpinMessage(activeConversationId);
+        setPinnedMessage(null);
+      } else {
+        await pinMessage(activeConversationId, m.id);
+        setPinnedMessage(m);
+      }
+    } catch (err: any) {
+      console.error("Failed to toggle pin message", err);
+    }
+  }
+
+  async function handleUnpinMessage() {
+    if (!activeConversationId) return;
+    try {
+      await unpinMessage(activeConversationId);
+      setPinnedMessage(null);
+    } catch (err: any) {
+      console.error("Failed to unpin message", err);
+    }
+  }
+
+  // ── New Group Creation ─────────────────────────────────────────────────────
+  async function handleCreateGroup(e: FormEvent) {
+    e.preventDefault();
+    if (!groupTitle.trim() || selectedColleagues.size === 0 || createGroupBusy) return;
+
+    setCreateGroupBusy(true);
+    setCreateGroupError(null);
+    try {
+      const newConv = (await createGroupConversation(
+        groupTitle.trim(),
+        Array.from(selectedColleagues),
+        groupDesc.trim() || undefined
+      )) as ChatConversation;
+
+      setConversations((prev) => [newConv, ...prev.filter((c) => c.id !== newConv.id)]);
+      setIsNewGroupModalOpen(false);
+      setGroupTitle("");
+      setGroupDesc("");
+      setSelectedColleagues(new Set());
+      handleSelectConversation(newConv.id);
+    } catch (err: any) {
+      setCreateGroupError(err.message || "Failed to create group channel");
+    } finally {
+      setCreateGroupBusy(false);
+    }
+  }
+
+  // ── Participant & Mute Handlers ────────────────────────────────────────────
+  async function handleToggleMute() {
+    if (!activeConversationId) return;
+    const next = !isMuted;
+    setIsMuted(next);
+    try {
+      await toggleMuteConversation(activeConversationId, next);
+    } catch {
+      setIsMuted(!next);
+    }
+  }
+
+  async function handleAddMember(userId: string) {
+    if (!activeConversationId) return;
+    try {
+      await addParticipant(activeConversationId, userId);
+      setShowAddMember(false);
+      setAddMemberFilter("");
+      void loadParticipants(activeConversationId);
+    } catch (err: any) {
+      alert(err.message || "Failed to add member");
+    }
+  }
+
+  async function handleRemoveMember(userId: string) {
+    if (!activeConversationId) return;
+    const isSelf = userId === myId;
+    if (!confirm(isSelf ? "Are you sure you want to leave this group?" : "Remove this member from group?")) return;
+    try {
+      await removeParticipant(activeConversationId, userId);
+      if (isSelf) {
+        setConversations((prev) => prev.filter((c) => c.id !== activeConversationId));
+        setActiveConversationId(null);
+        setShowDetailsDrawer(false);
+      } else {
+        void loadParticipants(activeConversationId);
+      }
+    } catch (err: any) {
+      alert(err.message || "Failed to remove member");
+    }
+  }
+
   // Switch Conversation
   const handleSelectConversation = (id: string) => {
     if (id !== activeConversationId) {
@@ -977,12 +1151,47 @@ export default function ChatPage() {
     );
   }
 
-  // Show only colleagues who don't already have an active conversation
+  // Filtered Conversations via Search
+  const filteredConversations = conversations.filter((c) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    const title = getConversationTitle(c).toLowerCase();
+    const hasParticipant = c.participants?.some((p) => {
+      const u = p.user;
+      return (
+        u?.firstName?.toLowerCase().includes(q) ||
+        u?.lastName?.toLowerCase().includes(q) ||
+        u?.email?.toLowerCase().includes(q) ||
+        u?.username?.toLowerCase().includes(q)
+      );
+    });
+    return title.includes(q) || hasParticipant;
+  });
+
+  // Show only colleagues who don't already have an active direct conversation
   const colleaguesWithoutChat = colleagues.filter((c) => {
     return !conversations.some(
       (conv) => conv.type === "DIRECT" && conv.participants.some((p) => p.userId === c.id)
     );
   });
+
+  const filteredColleagues = colleaguesWithoutChat.filter((c) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    const name = chatUserLabel(c).toLowerCase();
+    const email = (c.email || "").toLowerCase();
+    return name.includes(q) || email.includes(q);
+  });
+
+  // Extract shared media attachments for active conversation
+  const sharedAttachments = messages.flatMap((m) =>
+    (m.attachments || []).map((att) => ({
+      ...att,
+      sender: m.sender,
+      createdAt: m.createdAt,
+      messageId: m.id,
+    }))
+  );
 
   return (
     <div className="max-w-7xl mx-auto w-full h-[calc(100vh-5rem)] flex flex-col font-sans bg-slate-50 p-4 md:p-6">
@@ -1010,14 +1219,61 @@ export default function ChatPage() {
             activeConversationId ? "hidden md:flex" : "flex"
           }`}
         >
+          {/* Sidebar Header: Title, + New Group, Search Bar */}
+          <div className="p-3 border-b border-slate-200 bg-slate-50/70 flex flex-col gap-2.5">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-bold text-slate-800 tracking-tight">Messages</h2>
+              <button
+                type="button"
+                onClick={() => setIsNewGroupModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-teal-600 hover:bg-teal-700 text-white shadow-xs transition-colors"
+                title="Create new group channel"
+              >
+                <span className="material-symbols-outlined text-[16px]">group_add</span>
+                New Group
+              </button>
+            </div>
+            {/* Search Input */}
+            <div className="relative">
+              <span className="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-[18px]">
+                search
+              </span>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search chats & colleagues..."
+                className="w-full pl-8 pr-7 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500 placeholder:text-slate-400 text-slate-800"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  <span className="material-symbols-outlined text-[14px]">close</span>
+                </button>
+              )}
+            </div>
+          </div>
+
           <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col">
             <div className="p-3">
-              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Chats</p>
-              <ul className="space-y-0.5">
-                {conversations.length === 0 && (
-                  <p className="text-sm text-slate-400 p-2 text-center">No active conversations</p>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Conversations</p>
+                {searchQuery && (
+                  <span className="text-[11px] text-teal-600 font-medium">
+                    {filteredConversations.length} found
+                  </span>
                 )}
-                {conversations.map((c) => {
+              </div>
+              <ul className="space-y-0.5">
+                {filteredConversations.length === 0 && (
+                  <p className="text-xs text-slate-400 p-3 text-center bg-slate-50 rounded-lg">
+                    {searchQuery ? "No matching conversations" : "No active conversations"}
+                  </p>
+                )}
+                {filteredConversations.map((c) => {
                   const isActive = activeConversationId === c.id;
                   const title = getConversationTitle(c);
                   const otherUser = getOtherParticipant(c);
@@ -1060,7 +1316,7 @@ export default function ChatPage() {
                           <div className="flex items-center justify-between gap-1">
                             <p className={`text-xs truncate ${isActive ? "text-teal-100" : "text-slate-500"}`}>
                               {c.type === "GROUP"
-                                ? "Group channel"
+                                ? `${c.participants?.length || 0} members`
                                 : otherUser
                                 ? otherUser.email || otherUser.username || "Direct message"
                                 : "Direct message"}
@@ -1080,11 +1336,11 @@ export default function ChatPage() {
             </div>
 
             {/* Colleagues Section */}
-            {colleaguesWithoutChat.length > 0 && (
+            {filteredColleagues.length > 0 && (
               <div className="p-3 border-t border-slate-100 mt-2">
-                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Start a new chat</p>
+                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Direct Message</p>
                 <ul className="space-y-0.5">
-                  {colleaguesWithoutChat.map((c) => (
+                  {filteredColleagues.map((c) => (
                     <li key={c.id}>
                       <button
                         type="button"
@@ -1103,6 +1359,9 @@ export default function ChatPage() {
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium truncate text-slate-900 group-hover:text-teal-700 transition-colors">
                             {chatUserLabel(c)}
+                          </p>
+                          <p className="text-[11px] text-slate-400 truncate mt-0.5">
+                            {c.email || c.username || "Staff"}
                           </p>
                         </div>
                       </button>
@@ -1180,9 +1439,23 @@ export default function ChatPage() {
                     </p>
                   ) : activeConversation?.type === "GROUP" ? (
                     <p className="text-[12px] text-slate-400 leading-none mt-0.5">
-                      {activeConversation.participants?.length || 0} members
+                      {activeParticipants.length || activeConversation.participants?.length || 0} members
                     </p>
                   ) : null}
+                </div>
+
+                {/* Right side info / details toggle button */}
+                <div className="ml-auto flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowDetailsDrawer((prev) => !prev)}
+                    className={`p-2 rounded-lg text-slate-500 hover:text-teal-700 hover:bg-slate-100 transition-colors ${
+                      showDetailsDrawer ? "bg-teal-50 text-teal-700" : ""
+                    }`}
+                    title="Conversation details, participants & shared files"
+                  >
+                    <span className="material-symbols-outlined text-[20px] block">info</span>
+                  </button>
                 </div>
               </>
             ) : (
@@ -1191,6 +1464,46 @@ export default function ChatPage() {
               </div>
             )}
           </div>
+
+          {/* Pinned Message Sticky Banner */}
+          {activeConversationId && pinnedMessage && (
+            <div className="px-4 py-2 bg-amber-50 border-b border-amber-200/80 flex items-center justify-between gap-3 text-xs shrink-0 z-10 shadow-xs">
+              <div
+                onClick={() => scrollToMessage(pinnedMessage.id)}
+                className="flex items-center gap-2 min-w-0 cursor-pointer flex-1 group"
+                title="Click to jump to message"
+              >
+                <span className="material-symbols-outlined text-[16px] text-amber-600 shrink-0">push_pin</span>
+                <div className="min-w-0 flex items-baseline gap-1.5 truncate">
+                  <span className="font-bold text-amber-900 shrink-0">Pinned</span>
+                  <span className="text-slate-400 shrink-0">•</span>
+                  <span className="font-semibold text-slate-800 shrink-0">
+                    {pinnedMessage.sender ? chatUserLabel(pinnedMessage.sender) : "Colleague"}:
+                  </span>
+                  <span className="text-slate-600 truncate group-hover:text-amber-800 transition-colors">
+                    {pinnedMessage.content || (pinnedMessage.attachments?.length ? `📎 ${pinnedMessage.attachments[0].fileName}` : "Attachment")}
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => scrollToMessage(pinnedMessage.id)}
+                  className="px-2 py-0.5 rounded text-[11px] font-semibold text-amber-800 hover:bg-amber-100 transition-colors"
+                >
+                  View
+                </button>
+                <button
+                  type="button"
+                  onClick={handleUnpinMessage}
+                  className="p-1 rounded-full text-amber-600 hover:text-amber-900 hover:bg-amber-100 transition-colors"
+                  title="Unpin message"
+                >
+                  <span className="material-symbols-outlined text-[14px] block">close</span>
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Messages List (Telegram style background) */}
           <div ref={listRef} className="flex-1 overflow-y-auto p-4 space-y-2 bg-[#e6ebeb] custom-scrollbar">
@@ -1286,6 +1599,18 @@ export default function ChatPage() {
                           title="Reply"
                         >
                           <span className="material-symbols-outlined text-[16px] block">reply</span>
+                        </button>
+
+                        {/* Pin / Unpin Button */}
+                        <button
+                          type="button"
+                          onClick={() => handleTogglePinMessage(m)}
+                          className={`p-1 hover:text-amber-600 hover:bg-slate-100 rounded-full transition-colors ${
+                            pinnedMessage?.id === m.id ? "text-amber-600" : ""
+                          }`}
+                          title={pinnedMessage?.id === m.id ? "Unpin message" : "Pin message"}
+                        >
+                          <span className="material-symbols-outlined text-[16px] block">push_pin</span>
                         </button>
 
                         {/* Edit Button (own TEXT messages only) */}
@@ -1751,7 +2076,462 @@ export default function ChatPage() {
             </div>
           </form>
         </section>
+
+        {/* ── Group Details & Participants Drawer (Slide-Over) ──────────── */}
+        {showDetailsDrawer && activeConversation && (
+          <aside className="w-full md:w-[320px] lg:w-[360px] border-l border-slate-200 bg-white flex flex-col shrink-0 animate-in slide-in-from-right duration-200 z-20">
+            {/* Drawer Header */}
+            <div className="p-3.5 border-b border-slate-200 flex items-center justify-between bg-slate-50/70">
+              <h3 className="font-bold text-slate-800 text-sm">Conversation Details</h3>
+              <button
+                type="button"
+                onClick={() => setShowDetailsDrawer(false)}
+                className="p-1 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-colors"
+              >
+                <span className="material-symbols-outlined text-[18px] block">close</span>
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4">
+              {/* Channel / Conversation Card */}
+              <div className="flex flex-col items-center text-center p-3 rounded-xl bg-slate-50 border border-slate-100">
+                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-teal-500 to-teal-700 text-white flex items-center justify-center font-bold text-xl shadow-xs mb-2">
+                  {activeConversation.type === "GROUP"
+                    ? "G"
+                    : chatUserInitials(getOtherParticipant(activeConversation))}
+                </div>
+                <h4 className="font-bold text-slate-900 text-base">{channelTitle}</h4>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {activeConversation.type === "GROUP"
+                    ? `${activeParticipants.length} active members`
+                    : getOtherParticipant(activeConversation)?.email || "Direct Message"}
+                </p>
+                {activeConversation.description && (
+                  <p className="text-xs text-slate-600 mt-2 bg-white p-2 rounded-md border border-slate-100 w-full text-left">
+                    {activeConversation.description}
+                  </p>
+                )}
+              </div>
+
+              {/* Notification Mute Switch */}
+              <div className="flex items-center justify-between p-3 rounded-xl bg-white border border-slate-200">
+                <div className="flex items-center gap-2.5">
+                  <span className={`material-symbols-outlined text-[20px] ${isMuted ? "text-slate-400" : "text-teal-600"}`}>
+                    {isMuted ? "notifications_off" : "notifications"}
+                  </span>
+                  <div>
+                    <p className="text-xs font-semibold text-slate-800">Mute Notifications</p>
+                    <p className="text-[11px] text-slate-400">Silence popups and alerts</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleToggleMute}
+                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                    isMuted ? "bg-teal-600" : "bg-slate-200"
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                      isMuted ? "translate-x-4" : "translate-x-0"
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Drawer Tabs: Members vs Shared Media */}
+              <div className="flex border-b border-slate-200 text-xs font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setDrawerTab("members")}
+                  className={`flex-1 py-2 text-center border-b-2 transition-colors ${
+                    drawerTab === "members"
+                      ? "border-teal-600 text-teal-700"
+                      : "border-transparent text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  Members ({activeParticipants.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDrawerTab("media")}
+                  className={`flex-1 py-2 text-center border-b-2 transition-colors ${
+                    drawerTab === "media"
+                      ? "border-teal-600 text-teal-700"
+                      : "border-transparent text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  Shared Files ({sharedAttachments.length})
+                </button>
+              </div>
+
+              {/* TAB 1: MEMBERS */}
+              {drawerTab === "members" && (
+                <div className="space-y-3">
+                  {/* Add Member button (for Groups) */}
+                  {activeConversation.type === "GROUP" && (
+                    <div className="space-y-2">
+                      {!showAddMember ? (
+                        <button
+                          type="button"
+                          onClick={() => setShowAddMember(true)}
+                          className="w-full py-2 px-3 border border-dashed border-teal-300 rounded-lg text-xs font-semibold text-teal-700 hover:bg-teal-50 flex items-center justify-center gap-1.5 transition-colors"
+                        >
+                          <span className="material-symbols-outlined text-[16px]">person_add</span>
+                          Add Colleague to Group
+                        </button>
+                      ) : (
+                        <div className="p-2.5 rounded-lg border border-teal-200 bg-teal-50/50 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-teal-900">Add Member</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowAddMember(false);
+                                setAddMemberFilter("");
+                              }}
+                              className="text-slate-400 hover:text-slate-600"
+                            >
+                              <span className="material-symbols-outlined text-[14px]">close</span>
+                            </button>
+                          </div>
+                          <input
+                            type="text"
+                            value={addMemberFilter}
+                            onChange={(e) => setAddMemberFilter(e.target.value)}
+                            placeholder="Search colleagues..."
+                            className="w-full text-xs px-2.5 py-1.5 border border-slate-200 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-teal-500"
+                          />
+                          <div className="max-h-36 overflow-y-auto space-y-1 custom-scrollbar">
+                            {colleagues
+                              .filter(
+                                (c) =>
+                                  !activeParticipants.some((p) => p.userId === c.id) &&
+                                  (chatUserLabel(c).toLowerCase().includes(addMemberFilter.toLowerCase()) ||
+                                    (c.email || "").toLowerCase().includes(addMemberFilter.toLowerCase()))
+                              )
+                              .map((c) => (
+                                <button
+                                  key={c.id}
+                                  type="button"
+                                  onClick={() => handleAddMember(c.id)}
+                                  className="w-full text-left px-2 py-1.5 rounded hover:bg-white flex items-center justify-between text-xs text-slate-800 transition-colors"
+                                >
+                                  <span className="truncate font-medium">{chatUserLabel(c)}</span>
+                                  <span className="text-[11px] text-teal-600 font-semibold shrink-0 ml-1">Add +</span>
+                                </button>
+                              ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Participant List */}
+                  <div className="space-y-1">
+                    {activeParticipants.map((p) => {
+                      const isSelf = p.userId === myId;
+                      const u = p.user;
+                      const isOwnerRole = p.role === "OWNER";
+                      const isAdminRole = p.role === "ADMIN";
+
+                      return (
+                        <div
+                          key={p.userId}
+                          className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 transition-colors group"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="relative w-8 h-8 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center text-xs font-bold shrink-0">
+                              {chatUserInitials(u)}
+                              <span
+                                className={`absolute bottom-0 right-0 w-2 h-2 rounded-full border border-white ${
+                                  onlineUsers.has(p.userId) ? "bg-green-500" : "bg-slate-300"
+                                }`}
+                              />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-xs font-semibold text-slate-900 truncate">
+                                {u ? chatUserLabel(u) : "Colleague"} {isSelf && <span className="text-slate-400 font-normal">(You)</span>}
+                              </p>
+                              <p className="text-[10px] text-slate-400 truncate">{u?.email || u?.username || "Staff"}</p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                            <span
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                                isOwnerRole
+                                  ? "bg-amber-100 text-amber-800"
+                                  : isAdminRole
+                                  ? "bg-teal-100 text-teal-800"
+                                  : "bg-slate-100 text-slate-600"
+                              }`}
+                            >
+                              {p.role}
+                            </span>
+
+                            {/* Remove / Leave action */}
+                            {activeConversation.type === "GROUP" && !isOwnerRole && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveMember(p.userId)}
+                                className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-red-600 rounded transition-opacity"
+                                title={isSelf ? "Leave group" : "Remove member"}
+                              >
+                                <span className="material-symbols-outlined text-[15px] block">
+                                  {isSelf ? "logout" : "person_remove"}
+                                </span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 2: SHARED MEDIA */}
+              {drawerTab === "media" && (
+                <div className="space-y-3">
+                  {sharedAttachments.length === 0 ? (
+                    <p className="text-xs text-slate-400 text-center py-6 bg-slate-50 rounded-lg">
+                      No files or media shared yet.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {sharedAttachments.map((att, i) => {
+                        const isImg = att.mimeType?.startsWith("image/");
+                        return (
+                          <div
+                            key={i}
+                            className="flex items-center justify-between p-2 rounded-lg border border-slate-100 hover:border-slate-200 bg-slate-50/50 hover:bg-slate-50 transition-colors"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div
+                                onClick={() => {
+                                  if (isImg) {
+                                    setLightboxMedia({
+                                      src: `/api/v1/files/${att.fileId}/download`,
+                                      title: att.fileName,
+                                      fileId: att.fileId,
+                                    });
+                                  }
+                                }}
+                                className={`w-9 h-9 rounded-md flex items-center justify-center shrink-0 cursor-pointer ${
+                                  isImg ? "bg-teal-600 text-white" : "bg-slate-200 text-slate-700"
+                                }`}
+                              >
+                                <span className="material-symbols-outlined text-[18px]">
+                                  {isImg ? "image" : "description"}
+                                </span>
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-xs font-semibold text-slate-800 truncate" title={att.fileName}>
+                                  {att.fileName}
+                                </p>
+                                <p className="text-[10px] text-slate-400">
+                                  {att.sizeBytes / (1024 * 1024) < 1
+                                    ? `${(att.sizeBytes / 1024).toFixed(1)} KB`
+                                    : `${(att.sizeBytes / (1024 * 1024)).toFixed(1)} MB`}
+                                </p>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => downloadFile(att.fileId, att.fileName)}
+                              className="p-1.5 text-slate-400 hover:text-teal-600 rounded-full hover:bg-slate-200/60 transition-colors shrink-0 ml-1"
+                              title="Download file"
+                            >
+                              <span className="material-symbols-outlined text-[16px] block">download</span>
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </aside>
+        )}
       </div>
+
+      {/* ── New Group Channel Modal ─────────────────────────────────────── */}
+      {isNewGroupModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-md w-full flex flex-col max-h-[90vh] overflow-hidden">
+            {/* Modal Header */}
+            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-teal-600 text-[22px]">group_add</span>
+                <h3 className="font-bold text-slate-900 text-base">Create Group Channel</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsNewGroupModalOpen(false);
+                  setGroupTitle("");
+                  setGroupDesc("");
+                  setSelectedColleagues(new Set());
+                }}
+                className="text-slate-400 hover:text-slate-700"
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={handleCreateGroup} className="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-4">
+              {createGroupError && (
+                <div className="p-2.5 rounded-lg bg-red-50 text-red-700 border border-red-200 text-xs">
+                  {createGroupError}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Channel Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={groupTitle}
+                  onChange={(e) => setGroupTitle(e.target.value)}
+                  placeholder="e.g. Case Coordination Squad"
+                  className="w-full text-sm px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Description (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={groupDesc}
+                  onChange={(e) => setGroupDesc(e.target.value)}
+                  placeholder="What is this channel for?"
+                  className="w-full text-sm px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Select Members ({selectedColleagues.size} selected)
+                  </label>
+                </div>
+
+                {/* Colleague filter search */}
+                <input
+                  type="text"
+                  value={groupColleagueFilter}
+                  onChange={(e) => setGroupColleagueFilter(e.target.value)}
+                  placeholder="Filter colleagues by name or email..."
+                  className="w-full text-xs px-3 py-1.5 border border-slate-200 rounded-lg bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-teal-500 mb-2"
+                />
+
+                {/* Selected chips bar */}
+                {selectedColleagues.size > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-2.5 max-h-20 overflow-y-auto p-1">
+                    {Array.from(selectedColleagues).map((id) => {
+                      const u = colleagues.find((c) => c.id === id);
+                      return (
+                        <span
+                          key={id}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-teal-100 text-teal-800"
+                        >
+                          {u ? chatUserLabel(u) : "Colleague"}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const next = new Set(selectedColleagues);
+                              next.delete(id);
+                              setSelectedColleagues(next);
+                            }}
+                            className="hover:text-teal-950"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Colleagues checkbox list */}
+                <div className="max-h-44 overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-100 custom-scrollbar">
+                  {colleagues
+                    .filter(
+                      (c) =>
+                        chatUserLabel(c).toLowerCase().includes(groupColleagueFilter.toLowerCase()) ||
+                        (c.email || "").toLowerCase().includes(groupColleagueFilter.toLowerCase())
+                    )
+                    .map((c) => {
+                      const checked = selectedColleagues.has(c.id);
+                      return (
+                        <label
+                          key={c.id}
+                          className="flex items-center gap-3 p-2 hover:bg-slate-50 cursor-pointer transition-colors"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => {
+                              const next = new Set(selectedColleagues);
+                              if (checked) next.delete(c.id);
+                              else next.add(c.id);
+                              setSelectedColleagues(next);
+                            }}
+                            className="rounded border-slate-300 text-teal-600 focus:ring-teal-500 w-4 h-4"
+                          />
+                          <div className="relative w-7 h-7 rounded-full bg-teal-100 text-teal-800 font-bold text-xs flex items-center justify-center shrink-0">
+                            {chatUserInitials(c)}
+                            <span
+                              className={`absolute bottom-0 right-0 w-2 h-2 rounded-full border border-white ${
+                                onlineUsers.has(c.id) ? "bg-green-500" : "bg-slate-300"
+                              }`}
+                            />
+                          </div>
+                          <div className="flex-1 min-w-0 text-xs">
+                            <p className="font-semibold text-slate-800 truncate">{chatUserLabel(c)}</p>
+                            <p className="text-[11px] text-slate-400 truncate">{c.email || "Staff"}</p>
+                          </div>
+                        </label>
+                      );
+                    })}
+                </div>
+              </div>
+
+              {/* Modal Buttons */}
+              <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setIsNewGroupModalOpen(false)}
+                  className="px-4 py-2 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!groupTitle.trim() || selectedColleagues.size === 0 || createGroupBusy}
+                  className="px-4 py-2 rounded-lg text-xs font-semibold bg-teal-600 hover:bg-teal-700 text-white disabled:opacity-50 transition-colors shadow-xs flex items-center gap-1.5"
+                >
+                  {createGroupBusy ? (
+                    <>
+                      <span className="material-symbols-outlined text-[16px] animate-spin">progress_activity</span>
+                      Creating...
+                    </>
+                  ) : (
+                    "Create Channel"
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       <style>{`
         .custom-scrollbar::-webkit-scrollbar {
