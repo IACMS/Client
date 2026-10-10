@@ -147,6 +147,217 @@ function ChatImageAttachment({
   );
 }
 
+const EMOJI_CATEGORIES = [
+  {
+    id: "smileys",
+    name: "Smileys",
+    icon: "sentiment_satisfied",
+    emojis: [
+      "😀", "😃", "😄", "😁", "😆", "😅", "🤣", "😂", "🙂", "🙃", "😉", "😊", "😇", "🥰", "😍", "🤩", "😘", "😗",
+      "😚", "😙", "😋", "😛", "😜", "🤪", "😝", "🤑", "🤗", "🤭", "🤫", "🤔", "🤐", "🤨", "😐", "😑", "😶", "😏",
+      "😒", "🙄", "😬", "🤥", "😌", "😔", "😪", "🤤", "😴", "😷", "🤒", "🤕", "🤢", "🤮", "🤧", "🥵", "🥶", "🥴",
+      "😵", "🤯", "🤠", "🥳", "🥸", "😎", "🤓", "🧐", "😕", "😟", "🙁", "😮", "😯", "😲", "😳", "🥺", "😦", "😧",
+      "😨", "😰", "😥", "😢", "😭", "😱", "😖", "😣", "😞", "😓", "😩", "😫", "🥱", "😤", "😡", "😠", "🤬", "💀",
+      "💩", "🤡", "👻", "👽", "🤖"
+    ],
+  },
+  {
+    id: "gestures",
+    name: "Gestures",
+    icon: "pan_tool",
+    emojis: [
+      "👋", "🤚", "🖐️", "✋", "🖖", "👌", "🤌", "🤏", "✌️", "🤞", "🤟", "🤘", "🤙", "👈", "👉", "👆", "🖕", "👇",
+      "☝️", "👍", "👎", "✊", "👊", "🤛", "🤜", "👏", "🙌", "👐", "🤲", "🤝", "🙏", "✍️", "💪", "🧠", "👀", "👁️",
+      "👂", "👃", "👣", "🗣️", "👤", "👥"
+    ],
+  },
+  {
+    id: "hearts",
+    name: "Hearts & Vibes",
+    icon: "favorite",
+    emojis: [
+      "❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍", "🤎", "💔", "❣️", "💕", "💞", "💓", "💗", "💖", "💘", "💝",
+      "💟", "💯", "✨", "⭐", "🌟", "💥", "🔥", "🎉", "🎊", "🏆", "🥇", "🎯", "🚩", "⚠️", "🚫", "💡", "📌", "📍",
+      "🔔", "💎", "🔮", "🪄"
+    ],
+  },
+  {
+    id: "objects",
+    name: "Work & Objects",
+    icon: "folder",
+    emojis: [
+      "📁", "📂", "📄", "📋", "📊", "📈", "📉", "📅", "📆", "⏱️", "⏰", "📱", "💻", "🖥️", "⌨️", "✉️", "📧", "📦",
+      "🔒", "🔓", "🔑", "🔍", "🔎", "💬", "💭", "☕", "🍕", "🚀", "💼", "🗂️", "📎", "🔗", "🏷️", "📝", "✏️", "✒️",
+      "🛠️", "⚙️", "🛡️", "📞"
+    ],
+  },
+];
+
+function EmojiPickerPopover({
+  onSelect,
+  onClose,
+}: {
+  onSelect: (emoji: string) => void;
+  onClose: () => void;
+}) {
+  const [activeCategory, setActiveCategory] = useState("smileys");
+
+  const currentCat = EMOJI_CATEGORIES.find((c) => c.id === activeCategory) || EMOJI_CATEGORIES[0];
+
+  return (
+    <div
+      onClick={(e) => e.stopPropagation()}
+      className="absolute bottom-full right-2 sm:right-10 mb-2 z-40 w-72 sm:w-80 bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col"
+    >
+      {/* Category Tabs */}
+      <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/80 px-2 py-1.5">
+        <div className="flex items-center gap-1">
+          {EMOJI_CATEGORIES.map((cat) => (
+            <button
+              key={cat.id}
+              type="button"
+              onClick={() => setActiveCategory(cat.id)}
+              className={`p-1.5 rounded-lg transition-colors flex items-center justify-center cursor-pointer ${
+                activeCategory === cat.id
+                  ? "bg-teal-100 text-teal-700 font-bold"
+                  : "text-slate-500 hover:text-slate-800 hover:bg-slate-100"
+              }`}
+              title={cat.name}
+            >
+              <span className="material-symbols-outlined text-[18px]">{cat.icon}</span>
+            </button>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 cursor-pointer"
+        >
+          <span className="material-symbols-outlined text-[18px]">close</span>
+        </button>
+      </div>
+
+      {/* Emoji Grid */}
+      <div className="p-2 max-h-56 overflow-y-auto custom-scrollbar grid grid-cols-7 sm:grid-cols-8 gap-1 select-none">
+        {currentCat.emojis.map((emoji, idx) => (
+          <button
+            key={idx}
+            type="button"
+            onClick={() => onSelect(emoji)}
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-lg hover:bg-slate-100 active:scale-90 transition-transform cursor-pointer"
+          >
+            {emoji}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Audio / Voice message attachment player with Play/Pause, scrubber, and duration */
+function ChatAudioAttachment({
+  fileId,
+  fileName,
+  sizeBytes,
+}: {
+  fileId: string;
+  fileName: string;
+  sizeBytes?: number;
+}) {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const audioSrc = `/api/v1/files/${fileId}/download`;
+
+  const togglePlay = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!audioRef.current) return;
+    if (isPlaying) {
+      audioRef.current.pause();
+    } else {
+      audioRef.current.play().catch(console.error);
+    }
+  };
+
+  const handleTimeUpdate = () => {
+    if (audioRef.current) {
+      setCurrentTime(audioRef.current.currentTime);
+    }
+  };
+
+  const handleLoadedMetadata = () => {
+    if (audioRef.current) {
+      setDuration(audioRef.current.duration || 0);
+    }
+  };
+
+  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    e.stopPropagation();
+    const val = parseFloat(e.target.value);
+    setCurrentTime(val);
+    if (audioRef.current) {
+      audioRef.current.currentTime = val;
+    }
+  };
+
+  const formatSec = (secs: number) => {
+    if (isNaN(secs) || secs < 0) return "0:00";
+    const m = Math.floor(secs / 60);
+    const s = Math.floor(secs % 60);
+    return `${m}:${s < 10 ? "0" : ""}${s}`;
+  };
+
+  return (
+    <div
+      onClick={(e) => e.stopPropagation()}
+      className="flex items-center gap-3 p-2.5 my-1 rounded-2xl bg-teal-500/10 border border-teal-500/20 max-w-xs shadow-xs"
+    >
+      <audio
+        ref={audioRef}
+        src={audioSrc}
+        preload="metadata"
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
+        onEnded={() => {
+          setIsPlaying(false);
+          setCurrentTime(0);
+        }}
+        onTimeUpdate={handleTimeUpdate}
+        onLoadedMetadata={handleLoadedMetadata}
+      />
+      <button
+        type="button"
+        onClick={togglePlay}
+        className="w-10 h-10 rounded-full bg-teal-600 hover:bg-teal-700 text-white flex items-center justify-center shrink-0 shadow-sm transition-transform active:scale-95 cursor-pointer"
+        title={isPlaying ? "Pause" : "Play audio"}
+      >
+        <span className="material-symbols-outlined text-[24px]">
+          {isPlaying ? "pause" : "play_arrow"}
+        </span>
+      </button>
+      <div className="flex-1 min-w-0 flex flex-col gap-1 pr-1">
+        <input
+          type="range"
+          min={0}
+          max={duration || 100}
+          step={0.1}
+          value={currentTime}
+          onChange={handleSeek}
+          className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-teal-600"
+        />
+        <div className="flex items-center justify-between text-[11px] text-teal-800 font-semibold px-0.5 gap-2">
+          <span>{formatSec(currentTime)}</span>
+          <span className="truncate max-w-[120px]" title={fileName}>
+            {duration > 0 ? formatSec(duration) : (sizeBytes ? `${(sizeBytes / 1024).toFixed(0)} KB` : "Audio")}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** Document attachment card with custom badge and direct download */
 function ChatDocumentAttachment({
   fileId,
@@ -277,6 +488,40 @@ export default function ChatPage() {
   const isTypingRef = useRef<boolean>(false);
   const typingTimeoutRef = useRef<any>(null);
   const activeConversationIdRef = useRef<string | null>(activeConversationId);
+
+  // ── Phase 2.3 State: Audio Recording & Rich Emoji Picker ───────────────────
+  const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
+  const [isRecordingAudio, setIsRecordingAudio] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const [isUploadingAudio, setIsUploadingAudio] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordingTimerRef = useRef<any>(null);
+  const audioStreamRef = useRef<MediaStream | null>(null);
+  const emojiPickerRef = useRef<HTMLDivElement>(null);
+
+  // Close emoji picker on click outside
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target as Node)) {
+        setIsEmojiPickerOpen(false);
+      }
+    }
+    if (isEmojiPickerOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [isEmojiPickerOpen]);
+
+  // Clean up audio recorder on unmount
+  useEffect(() => {
+    return () => {
+      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+      if (audioStreamRef.current) {
+        audioStreamRef.current.getTracks().forEach((t) => t.stop());
+      }
+    };
+  }, []);
 
   useEffect(() => {
     activeConversationIdRef.current = activeConversationId;
@@ -787,6 +1032,138 @@ export default function ChatPage() {
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
+  };
+
+  // ── Audio Recording Helpers ───────────────────────────────────────────────
+  const startRecordingAudio = async () => {
+    if (!activeConversationId) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioStreamRef.current = stream;
+      audioChunksRef.current = [];
+
+      let mimeType = "audio/webm;codecs=opus";
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        mimeType = MediaRecorder.isTypeSupported("audio/webm")
+          ? "audio/webm"
+          : (MediaRecorder.isTypeSupported("audio/mp4") ? "audio/mp4" : "");
+      }
+
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          audioChunksRef.current.push(e.data);
+        }
+      };
+
+      recorder.start(200);
+      setIsRecordingAudio(true);
+      setRecordingDuration(0);
+
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingDuration((prev) => prev + 1);
+      }, 1000);
+    } catch (err: any) {
+      console.error("Microphone access error:", err);
+      alert(
+        err?.name === "NotAllowedError"
+          ? "Microphone access was denied. Please allow microphone permissions in your browser to record voice messages."
+          : `Failed to access microphone: ${err?.message || "Unknown error"}`
+      );
+    }
+  };
+
+  const cancelRecordingAudio = () => {
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+    }
+    if (audioStreamRef.current) {
+      audioStreamRef.current.getTracks().forEach((t) => t.stop());
+      audioStreamRef.current = null;
+    }
+    audioChunksRef.current = [];
+    setIsRecordingAudio(false);
+    setRecordingDuration(0);
+  };
+
+  const stopAndSendAudio = async () => {
+    if (!mediaRecorderRef.current || !activeConversationId) return;
+
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+    }
+
+    const durationSec = recordingDuration;
+    setIsRecordingAudio(false);
+    setIsUploadingAudio(true);
+
+    const recorder = mediaRecorderRef.current;
+
+    recorder.onstop = async () => {
+      try {
+        if (audioStreamRef.current) {
+          audioStreamRef.current.getTracks().forEach((t) => t.stop());
+          audioStreamRef.current = null;
+        }
+
+        const mimeType = recorder.mimeType || "audio/webm";
+        const ext = mimeType.includes("mp4") ? "mp4" : (mimeType.includes("ogg") ? "ogg" : "webm");
+        const blob = new Blob(audioChunksRef.current, { type: mimeType });
+        const formatTime = (s: number) => {
+          const m = Math.floor(s / 60);
+          const rem = s % 60;
+          return `${m}:${rem < 10 ? "0" : ""}${rem}`;
+        };
+        const fileName = `Voice message (${formatTime(durationSec)}).${ext}`;
+        const file = new File([blob], fileName, { type: mimeType });
+
+        const uploaded = await uploadFileAuto({
+          file,
+          service: "chat-service",
+          module: "chat-attachment",
+          referenceId: activeConversationId,
+        });
+
+        const clientMessageId = crypto.randomUUID();
+        const attachmentPayload: ChatAttachment[] = [
+          {
+            fileId: uploaded.id,
+            fileName,
+            mimeType,
+            sizeBytes: file.size,
+          },
+        ];
+
+        const res = (await apiPost(
+          `/api/v1/chat/conversations/${activeConversationId}/messages`,
+          {
+            content: `🎤 Voice message (${formatTime(durationSec)})`,
+            clientMessageId,
+            messageType: "FILE",
+            attachments: attachmentPayload,
+          }
+        )) as { message?: ChatMessage };
+
+        if (res && res.message) {
+          setMessages((prev) => [...prev, res.message!]);
+          setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+        }
+      } catch (err: any) {
+        console.error("Failed to send voice message:", err);
+        setErrorMessage(err?.message || "Failed to send voice message");
+      } finally {
+        setIsUploadingAudio(false);
+        setRecordingDuration(0);
+        audioChunksRef.current = [];
+      }
+    };
+
+    recorder.stop();
   };
 
   // ── Send Message ──────────────────────────────────────────────────────────
@@ -1692,11 +2069,19 @@ export default function ChatPage() {
                         </div>
                       )}
 
-                      {/* Attachments: Images and Documents */}
+                      {/* Attachments: Images, Audio, and Documents */}
                       {m.attachments && m.attachments.length > 0 && (
                         <div className="flex flex-col gap-1.5 mb-1 mt-0.5">
                           {m.attachments.map((att, idx) => {
                             const isImg = att.mimeType.startsWith("image/") || m.messageType === "IMAGE";
+                            const isAudio =
+                              att.mimeType.startsWith("audio/") ||
+                              att.fileName.endsWith(".webm") ||
+                              att.fileName.endsWith(".ogg") ||
+                              att.fileName.endsWith(".mp3") ||
+                              att.fileName.endsWith(".wav") ||
+                              att.fileName.endsWith(".m4a");
+
                             if (isImg) {
                               return (
                                 <ChatImageAttachment
@@ -1704,6 +2089,16 @@ export default function ChatPage() {
                                   fileId={att.fileId}
                                   fileName={att.fileName}
                                   onOpenLightbox={(src, title) => setLightboxMedia({ src, title, fileId: att.fileId })}
+                                />
+                              );
+                            }
+                            if (isAudio) {
+                              return (
+                                <ChatAudioAttachment
+                                  key={att.id || att.fileId || idx}
+                                  fileId={att.fileId}
+                                  fileName={att.fileName}
+                                  sizeBytes={att.sizeBytes}
                                 />
                               );
                             }
@@ -2012,52 +2407,101 @@ export default function ChatPage() {
                 <span className="material-symbols-outlined text-[24px]">attach_file</span>
               </button>
 
-              {/* Textarea Area */}
-              <div className="flex-1 flex items-center min-w-0">
-                <textarea
-                  ref={textareaRef}
-                  rows={1}
-                  value={draft}
-                  onChange={(e) => handleDraftChange(e.target.value)}
-                  disabled={sendBusy || !activeConversationId}
-                  placeholder={
-                    !activeConversationId
-                      ? "Select a conversation to send a message..."
-                      : replyingTo
-                      ? "Write a reply..."
-                      : stagedAttachment
-                      ? "Add a caption or send..."
-                      : "Write a message..."
-                  }
-                  className="w-full bg-transparent py-2 px-2 text-[15px] text-slate-900 placeholder:text-slate-400 resize-none border-0 border-none outline-none ring-0 focus:border-0 focus:border-none focus:outline-none focus:ring-0 focus:ring-transparent shadow-none focus:shadow-none disabled:opacity-50 min-h-[40px] max-h-[140px] leading-relaxed custom-scrollbar"
-                  style={{ border: "none", outline: "none", boxShadow: "none" }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      void handleSend(e as unknown as FormEvent);
+              {/* Center: Message Text Area or Recording Bar */}
+              {isRecordingAudio ? (
+                <div className="flex-1 flex items-center justify-between bg-red-50/90 border border-red-200/90 rounded-2xl px-4 py-2 animate-in fade-in duration-150">
+                  <div className="flex items-center gap-3">
+                    <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping shrink-0" />
+                    <span className="text-red-700 font-bold text-sm font-mono tracking-wide">
+                      {Math.floor(recordingDuration / 60).toString().padStart(2, "0")}:{(recordingDuration % 60).toString().padStart(2, "0")}
+                    </span>
+                    <span className="text-xs text-red-600/80 font-medium hidden sm:inline">Recording voice note...</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={cancelRecordingAudio}
+                      className="p-1.5 rounded-full text-slate-500 hover:text-red-600 hover:bg-red-100/80 transition-colors cursor-pointer"
+                      title="Discard recording"
+                    >
+                      <span className="material-symbols-outlined text-[20px]">delete</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={stopAndSendAudio}
+                      className="px-3.5 py-1.5 rounded-full bg-teal-600 hover:bg-teal-700 text-white font-medium text-xs flex items-center gap-1.5 shadow-xs transition-transform active:scale-95 cursor-pointer"
+                      title="Send voice note"
+                    >
+                      <span>Send</span>
+                      <span className="material-symbols-outlined text-[16px]">send</span>
+                    </button>
+                  </div>
+                </div>
+              ) : isUploadingAudio ? (
+                <div className="flex-1 flex items-center gap-2.5 px-4 py-2 bg-teal-50 border border-teal-200 rounded-2xl text-xs text-teal-700 font-semibold animate-pulse">
+                  <span className="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>
+                  <span>Uploading voice message...</span>
+                </div>
+              ) : (
+                <div className="flex-1 min-w-0">
+                  <textarea
+                    ref={textareaRef}
+                    rows={1}
+                    value={draft}
+                    onChange={(e) => handleDraftChange(e.target.value)}
+                    disabled={sendBusy || !activeConversationId}
+                    placeholder={
+                      !activeConversationId
+                        ? "Select a conversation to send a message..."
+                        : replyingTo
+                        ? "Write a reply..."
+                        : stagedAttachment
+                        ? "Add a caption or send..."
+                        : "Write a message..."
                     }
-                  }}
-                />
-              </div>
+                    className="w-full bg-transparent py-2 px-2 text-[15px] text-slate-900 placeholder:text-slate-400 resize-none border-0 border-none outline-none ring-0 focus:border-0 focus:border-none focus:outline-none focus:ring-0 focus:ring-transparent shadow-none focus:shadow-none disabled:opacity-50 min-h-[40px] max-h-[140px] leading-relaxed custom-scrollbar"
+                    style={{ border: "none", outline: "none", boxShadow: "none" }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        void handleSend(e as unknown as FormEvent);
+                      }
+                    }}
+                  />
+                </div>
+              )}
 
-              {/* Emoji / Smile Button */}
-              <button
-                type="button"
-                disabled={!activeConversationId}
-                onClick={() => setDraft((prev) => prev + " 😊")}
-                className="w-10 h-10 flex items-center justify-center text-slate-400 hover:text-teal-600 disabled:opacity-40 transition-colors shrink-0 rounded-full hover:bg-slate-100"
-                title="Emoji"
-              >
-                <span className="material-symbols-outlined text-[24px]">sentiment_satisfied</span>
-              </button>
+              {/* Emoji Picker Popover & Smile Button */}
+              <div className="relative" ref={emojiPickerRef}>
+                <button
+                  type="button"
+                  disabled={!activeConversationId || isRecordingAudio}
+                  onClick={() => setIsEmojiPickerOpen((prev) => !prev)}
+                  className={`w-10 h-10 flex items-center justify-center transition-colors shrink-0 rounded-full ${
+                    isEmojiPickerOpen ? "text-teal-600 bg-teal-50" : "text-slate-400 hover:text-teal-600 hover:bg-slate-100"
+                  } disabled:opacity-40 cursor-pointer`}
+                  title="Emoji Picker"
+                >
+                  <span className="material-symbols-outlined text-[24px]">sentiment_satisfied</span>
+                </button>
+                {isEmojiPickerOpen && (
+                  <EmojiPickerPopover
+                    onSelect={(emoji) => {
+                      setDraft((prev) => prev + emoji);
+                      textareaRef.current?.focus();
+                    }}
+                    onClose={() => setIsEmojiPickerOpen(false)}
+                  />
+                )}
+              </div>
 
               {/* Mic / Send Button */}
               {draft.trim() || stagedAttachment?.fileId ? (
                 <button
                   type="submit"
-                  disabled={sendBusy || stagedAttachment?.uploading}
-                  className="w-10 h-10 rounded-full bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white flex items-center justify-center transition-all shrink-0 shadow-sm"
-                  title="Send"
+                  disabled={sendBusy || stagedAttachment?.uploading || isRecordingAudio}
+                  className="w-10 h-10 rounded-full bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white flex items-center justify-center transition-all shrink-0 shadow-sm cursor-pointer"
+                  title="Send message"
                 >
                   <span className="material-symbols-outlined text-[20px] ml-0.5" style={{ fontVariationSettings: "'FILL' 1" }}>
                     send
@@ -2066,9 +2510,10 @@ export default function ChatPage() {
               ) : (
                 <button
                   type="button"
-                  disabled={!activeConversationId}
-                  className="w-10 h-10 flex items-center justify-center text-slate-400 hover:text-teal-600 disabled:opacity-40 transition-colors shrink-0 rounded-full hover:bg-slate-100"
-                  title="Voice message"
+                  disabled={!activeConversationId || isUploadingAudio || isRecordingAudio}
+                  onClick={startRecordingAudio}
+                  className="w-10 h-10 flex items-center justify-center text-slate-500 hover:text-teal-600 hover:bg-teal-50 disabled:opacity-40 transition-colors shrink-0 rounded-full cursor-pointer"
+                  title="Record voice message"
                 >
                   <span className="material-symbols-outlined text-[24px]">mic</span>
                 </button>
