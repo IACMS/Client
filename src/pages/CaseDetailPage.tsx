@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useNavigate } from "react-router-dom";
 import CaseReferralsPanel from "@/components/CaseReferralsPanel";
 import CaseTaskProgressView from "@/components/CaseTaskProgressView";
 import CaseWorkflowGuidePanel, { type WorkflowGuideStep } from "@/components/CaseWorkflowGuidePanel";
@@ -192,6 +192,62 @@ export default function CaseDetailPage() {
   const [scrollNextActionsPending, setScrollNextActionsPending] = useState(false);
   const [reportBusy, setReportBusy] = useState(false);
   const [reportMsg, setReportMsg] = useState<string | null>(null);
+
+  // ── Case-Linked Collaboration State ───────────────────────────────────────
+  const navigate = useNavigate();
+  const [caseChatExists, setCaseChatExists] = useState(false);
+  const [caseChatConversationId, setCaseChatConversationId] = useState<string | null>(null);
+  const [caseChatBusy, setCaseChatBusy] = useState(false);
+
+  useEffect(() => {
+    if (!decodedId) return;
+    let active = true;
+    async function checkChat() {
+      try {
+        const res = (await apiGet(`/api/v1/chat/conversations/case/${decodedId}`)) as {
+          exists?: boolean;
+          conversation?: { id: string };
+        };
+        if (active && res) {
+          setCaseChatExists(Boolean(res.exists));
+          if (res.conversation?.id) {
+            setCaseChatConversationId(res.conversation.id);
+          }
+        }
+      } catch {
+        if (active) setCaseChatExists(false);
+      }
+    }
+    void checkChat();
+    return () => {
+      active = false;
+    };
+  }, [decodedId]);
+
+  const handleCaseChatAction = async () => {
+    if (!decodedId || caseChatBusy) return;
+    if (caseChatExists && caseChatConversationId) {
+      navigate(`/chat?conversationId=${caseChatConversationId}`);
+      return;
+    }
+
+    setCaseChatBusy(true);
+    try {
+      const res = (await apiPost(`/api/v1/chat/conversations/case/${decodedId}`, {})) as {
+        conversation?: { id: string };
+      };
+      if (res && res.conversation?.id) {
+        setCaseChatExists(true);
+        setCaseChatConversationId(res.conversation.id);
+        navigate(`/chat?conversationId=${res.conversation.id}`);
+      }
+    } catch (err: any) {
+      console.error("Failed to start case chat:", err);
+      alert(err?.message || "Failed to start case discussion room");
+    } finally {
+      setCaseChatBusy(false);
+    }
+  };
 
   const loadCase = useCallback(
     async (signal?: AbortSignal) => {
@@ -845,6 +901,31 @@ export default function CaseDetailPage() {
           </div>
           <div className="flex flex-col items-end gap-2">
             <div className="flex flex-wrap items-center justify-end gap-2">
+              {/* Case-Linked Team Chat Button (On-Demand) */}
+              <button
+                type="button"
+                disabled={caseChatBusy}
+                onClick={() => void handleCaseChatAction()}
+                className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border text-sm font-semibold transition-all shadow-xs cursor-pointer ${
+                  caseChatExists
+                    ? "border-teal-500 bg-teal-50 text-teal-800 hover:bg-teal-100 hover:border-teal-600"
+                    : "border-outline-variant bg-white text-primary hover:bg-slate-50 hover:text-teal-700"
+                }`}
+                title={
+                  caseChatExists
+                    ? "Open active team discussion room for this case"
+                    : "Initiate team discussion room for this case"
+                }
+              >
+                <span className={`material-symbols-outlined text-[18px] ${caseChatExists ? "text-teal-600" : "text-slate-500"}`}>
+                  {caseChatBusy ? "progress_activity" : caseChatExists ? "forum" : "chat_add_on"}
+                </span>
+                <span>{caseChatBusy ? "Connecting..." : caseChatExists ? "Open Case Chat" : "Start Case Chat"}</span>
+                {caseChatExists && (
+                  <span className="w-2 h-2 rounded-full bg-teal-500 animate-pulse ml-0.5" />
+                )}
+              </button>
+
               <button
                 type="button"
                 disabled={reportBusy}

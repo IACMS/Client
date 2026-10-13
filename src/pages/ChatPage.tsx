@@ -1,4 +1,5 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { ApiError, apiPost, isAbortError } from "@/lib/api";
 import {
@@ -466,6 +467,32 @@ export default function ChatPage() {
   const { get } = useTenantApi();
   const myId = user?.id ?? "";
 
+  // ── URL Query Linking (?conversationId=...) ──────────────────────────────
+  const [searchParams] = useSearchParams();
+  const queryConversationId = searchParams.get("conversationId");
+
+  // ── Case Metadata Helper ──────────────────────────────────────────────────
+  type CaseMetadata = {
+    caseId: string;
+    caseNumber: string;
+    caseTitle: string;
+    priority?: string;
+    status?: string;
+  };
+
+  const getCaseMetadata = (conv?: ChatConversation | null): CaseMetadata | null => {
+    if (!conv?.description) return null;
+    try {
+      const parsed = JSON.parse(conv.description);
+      if (parsed && typeof parsed === "object" && parsed.caseId) {
+        return parsed as CaseMetadata;
+      }
+    } catch {
+      // Non-JSON description
+    }
+    return null;
+  };
+
   const [conversations, setConversations] = useState<ChatConversation[]>([]);
   const [colleagues, setColleagues] = useState<ChatUser[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
@@ -826,7 +853,25 @@ export default function ChatPage() {
   const loadConversations = useCallback(async () => {
     try {
       const res = (await get("/api/v1/chat/conversations")) as { conversations: ChatConversation[] };
-      setConversations(res.conversations || []);
+      let convList = res.conversations || [];
+
+      // If user navigated with ?conversationId=..., auto-select and ensure it's in list
+      if (queryConversationId) {
+        const found = convList.some((c) => c.id === queryConversationId);
+        if (!found) {
+          try {
+            const single = (await get(`/api/v1/chat/conversations/${queryConversationId}`)) as ChatConversation;
+            if (single && single.id) {
+              convList = [single, ...convList];
+            }
+          } catch {
+            // Inaccessible or deleted
+          }
+        }
+        setActiveConversationId(queryConversationId);
+      }
+
+      setConversations(convList);
     } catch (err: unknown) {
       if (isAbortError(err)) return;
       if (err instanceof ApiError && err.status === 403) {
@@ -836,7 +881,7 @@ export default function ChatPage() {
       }
       setErrorMessage(err instanceof ApiError ? err.message : t("chat.loadFailed"));
     }
-  }, [get, t]);
+  }, [get, queryConversationId, t]);
 
   const loadColleagues = useCallback(async () => {
     try {
@@ -1840,7 +1885,13 @@ export default function ChatPage() {
                             isActive ? "bg-white text-teal-700" : "bg-teal-700 text-white"
                           }`}
                         >
-                          {c.type === "GROUP" ? "G" : chatUserInitials(otherUser)}
+                          {(() => {
+                            const caseMeta = getCaseMetadata(c);
+                            if (caseMeta) {
+                              return <span className="material-symbols-outlined text-[18px]">folder_open</span>;
+                            }
+                            return c.type === "GROUP" ? "G" : chatUserInitials(otherUser);
+                          })()}
                           {c.type !== "GROUP" && otherUser && (
                             <span
                               className={`absolute bottom-0 right-0 w-[11px] h-[11px] rounded-full border-2 ${
@@ -1864,7 +1915,12 @@ export default function ChatPage() {
                           <div className="flex items-center justify-between gap-1">
                             <p className={`text-xs truncate ${isActive ? "text-teal-100" : "text-slate-500"}`}>
                               {c.type === "GROUP"
-                                ? `${c.participants?.length || 0} members`
+                                ? (() => {
+                                    const caseMeta = getCaseMetadata(c);
+                                    return caseMeta
+                                      ? `Case #${caseMeta.caseNumber} · ${c.participants?.length || 0} members`
+                                      : `${c.participants?.length || 0} members`;
+                                  })()
                                 : otherUser
                                 ? otherUser.email || otherUser.username || "Direct message"
                                 : "Direct message"}
@@ -1957,7 +2013,24 @@ export default function ChatPage() {
                     )}
                 </div>
                 <div className="min-w-0">
-                  <h2 className="font-semibold text-slate-900 text-[15px] leading-snug truncate">{channelTitle}</h2>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <h2 className="font-semibold text-slate-900 text-[15px] leading-snug truncate">{channelTitle}</h2>
+                    {(() => {
+                      const caseMeta = getCaseMetadata(activeConversation);
+                      if (!caseMeta) return null;
+                      return (
+                        <Link
+                          to={`/cases/${caseMeta.caseId}`}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-teal-50 hover:bg-teal-100 border border-teal-200 text-teal-800 text-[11px] font-semibold transition-colors shrink-0 shadow-2xs cursor-pointer"
+                          title="Open Case File in Cases module"
+                        >
+                          <span className="material-symbols-outlined text-[14px] text-teal-600">folder_open</span>
+                          <span>Case #{caseMeta.caseNumber}</span>
+                          <span className="material-symbols-outlined text-[12px] text-teal-500">open_in_new</span>
+                        </Link>
+                      );
+                    })()}
+                  </div>
 
                   {/* Subtitle: Typing Indicator or Presence Status */}
                   {typingUsers.size > 0 ? (
