@@ -104,9 +104,10 @@ function KpiCard({
 
 function ServiceHealthDot({ service }: { service: ServiceHealth }) {
   const labels: Record<string, string> = {
-    auth: "Auth", rbac: "RBAC", case: "Case", workflow: "Workflow",
-    referral: "Referral", audit: "Audit", integration: "Integration",
-    notification: "Notification", file: "File",
+    iam: "IAM", auth: "Auth", rbac: "RBAC", caseEngine: "Case Engine",
+    case: "Case", workflow: "Workflow", referral: "Referral",
+    audit: "Audit", integration: "Integration", notification: "Notification",
+    file: "File", chat: "Chat",
   };
   return (
     <div

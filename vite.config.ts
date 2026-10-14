@@ -1,11 +1,27 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { defineConfig } from "vite";
+import { defineConfig, createLogger } from "vite";
 import react from "@vitejs/plugin-react";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+const logger = createLogger();
+const originalError = logger.error.bind(logger);
+
+logger.error = (msg, options) => {
+  // Silence harmless TCP socket drops when browser reloads, unmounts (React StrictMode), or navigates
+  if (
+    msg.includes("ECONNRESET") ||
+    msg.includes("socket hang up") ||
+    msg.includes("EPIPE")
+  ) {
+    return;
+  }
+  originalError(msg, options);
+};
+
 export default defineConfig({
+  customLogger: logger,
   plugins: [react()],
   server: {
     host: true,
@@ -31,6 +47,11 @@ export default defineConfig({
             // Silence harmless pipe breaks that occur when browser reconnects during HMR
             if (err?.code === "EPIPE" || err?.code === "ECONNRESET") return;
             console.error("[Vite WS proxy] error:", err.message);
+          });
+          proxy.on("proxySocketError", (err: any) => {
+            // Silence harmless socket drops when browser reloads or navigates pages
+            if (err?.code === "EPIPE" || err?.code === "ECONNRESET") return;
+            console.error("[Vite WS proxy] socket error:", err.message);
           });
         },
       },
